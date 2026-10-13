@@ -1,0 +1,26 @@
+# Dependências
+node_modules/
+
+# Saída do instalador (gerada por `npm run dist`)
+dist/
+
+# Ícones gerados por `npm run icons` (scripts/make-icons.js)
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Arquivos do sistema e editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Variáveis de ambiente e credenciais (nunca versionar tokens)
+.env
+.env.*
+.credentials.json
+
+# Configurações locais do Claude Code
+.claude/
