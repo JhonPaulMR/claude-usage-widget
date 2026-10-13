@@ -7,7 +7,7 @@ Widget fixo na borda direita da tela (Windows) que mostra, em tempo real, quanto
 - Claude Code instalado e com login feito (o widget lê o login dele; não pede senha)
 
 ## Instalar
-1. Abra a pasta `dist` do projeto e execute **`Claude Usage Widget Setup 0.1.0.exe`**.
+1. Vá em releases e instale a versão mais recente **`Claude Usage Widget Setup x.x.x.exe`**.
 2. A instalação é automática, sem assistentes. O widget abre sozinho na lateral direita.
 3. Na primeira execução ele já fica configurado para **iniciar com o Windows**.
 
