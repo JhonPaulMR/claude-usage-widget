@@ -2,6 +2,12 @@
 
 Widget fixo na borda direita da tela (Windows) que mostra, em tempo real, quanto você já usou dos limites do Claude: a **sessão de 5 horas** e o **limite semanal**.
 
+  <img width="177" height="400" alt="image" src="https://github.com/user-attachments/assets/19a2943c-7ed8-4f82-944b-27a2db5d14b0" />
+  <img width="362" height="400" alt="image" src="https://github.com/user-attachments/assets/ae8e78c1-ae76-4951-a8ca-0551b6cf3935" />
+
+
+
+
 ## Requisitos
 - Windows 10 ou 11
 - Claude Code instalado e com login feito (o widget lê o login dele; não pede senha)
