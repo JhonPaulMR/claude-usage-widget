@@ -59,6 +59,12 @@ function paceProjection(pct, resetsAt, windowMs, now = Date.now()) {
   return { level: 'ok', text: 'ritmo confortável' };
 }
 
+// 100000 -> "1:40"; usado na contagem para a próxima tentativa
+function formatMmSs(ms) {
+  const total = Math.max(0, Math.ceil((ms || 0) / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
 function formatClock(ts) {
   if (!ts) return '—';
   const d = new Date(ts);
@@ -73,6 +79,7 @@ const api = {
   formatCountdown,
   formatResetAt,
   paceProjection,
+  formatMmSs,
   formatClock,
 };
 

@@ -1,8 +1,11 @@
 const { app, Tray, Menu, Notification, globalShortcut, powerMonitor, ipcMain, screen, nativeImage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { createStore } = require('./store');
 const { createWidgetWindow } = require('./window');
-const { fetchUsage, fetchDemo } = require('./usageProvider');
+const { fetchUsage, fetchDemo, readExpiry, CRED_PATH } = require('./usageProvider');
+const { nextBackoffSec, nextDelaySec } = require('./schedule');
+const { createTokenRefresher } = require('./tokenRefresher');
 const { createAlerter } = require('./alerts');
 
 const FORCE_DEMO = process.argv.includes('--demo');
@@ -15,8 +18,11 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let store, widget, tray, pollTimer, backoffSec = 0;
-let payload = { state: 'loading', data: null, fetchedAt: null, message: '' };
+let payload = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
 let fetching = false;
+let lastRenewal = null; // resultado da última tentativa de renovar o token (aparece no menu)
+
+const tokenRefresher = createTokenRefresher({ readExpiry, log: (r) => { lastRenewal = { ...r, at: Date.now() }; } });
 
 const alerter = createAlerter((title, body) => {
   if (Notification.isSupported()) new Notification({ title, body, silent: false }).show();
@@ -34,15 +40,35 @@ function push() {
   if (widget && !widget.win.isDestroyed()) widget.win.webContents.send('usage', payload);
 }
 
-function nextDelaySec() {
-  if (payload.state === 'offline') return Math.min(store.get('intervalSec'), 15);
-  if (payload.state === 'auth' || payload.state === 'format') return Math.max(store.get('intervalSec'), 60);
-  return Math.max(store.get('intervalSec'), backoffSec);
-}
-
+// Agenda a próxima consulta e registra quando ela será (a interface mostra a contagem).
 function schedule() {
   clearTimeout(pollTimer);
-  pollTimer = setTimeout(refresh, nextDelaySec() * 1000);
+  const delayMs = nextDelaySec(payload.state, store.get('intervalSec'), backoffSec) * 1000;
+  payload.nextAt = Date.now() + delayMs;
+  pollTimer = setTimeout(refresh, delayMs);
+}
+
+// Token vencido: pede ao Claude Code para renovar (escondido) e consulta de novo se der certo.
+function renewToken() {
+  if (!store.get('autoRenew') || isDemo()) return;
+  tokenRefresher.refresh({ allowPaid: store.get('autoRenewPaid') }).then((r) => {
+    rebuildMenu();
+    if (r.ok) refresh();
+  });
+}
+
+// O Claude Code regrava o arquivo de credenciais ao renovar: se estávamos sem sessão, consulta na hora.
+function watchCredentials() {
+  let debounce = null;
+  try {
+    fs.watch(path.dirname(CRED_PATH), (_ev, name) => {
+      if (name !== path.basename(CRED_PATH) || payload.state !== 'auth') return;
+      clearTimeout(debounce);
+      debounce = setTimeout(refresh, 800);
+    });
+  } catch {
+    /* pasta ainda não existe: o agendamento normal cobre */
+  }
 }
 
 async function refresh() {
@@ -50,7 +76,7 @@ async function refresh() {
   fetching = true;
   clearTimeout(pollTimer);
   try {
-    const data = isDemo() ? fetchDemo() : await fetchUsage();
+    const data = isDemo() ? fetchDemo() : await fetchUsage({ allowPaidFallback: store.get('paidFallback') });
     backoffSec = 0;
     const fetchedAt = Date.now();
     payload = { state: 'ok', data, fetchedAt, message: '' };
@@ -63,19 +89,23 @@ async function refresh() {
     if (thresholds.length) alerter(data, thresholds);
   } catch (e) {
     const kind = e.kind || 'network';
-    if (kind === 'ratelimit') backoffSec = Math.min((backoffSec || store.get('intervalSec')) * 2, 600);
+    if (kind === 'ratelimit') backoffSec = nextBackoffSec(backoffSec, store.get('intervalSec'), e.retryAfterSec);
     const last = store.get('last');
     payload = {
-      state: kind === 'network' ? 'offline' : kind === 'ratelimit' ? 'ok' : kind,
+      state: kind === 'network' ? 'offline' : kind,
       data: last ? last.data : null,
       fetchedAt: last ? last.fetchedAt : null,
       message: e.message || '',
+      renewing: false,
     };
-    if (kind === 'ratelimit' && !last) payload.state = 'loading';
+    if (e.expired && store.get('autoRenew')) {
+      payload.renewing = true;
+      renewToken();
+    }
   } finally {
     fetching = false;
-    push();
     schedule();
+    push();
     rebuildMenu();
   }
 }
@@ -130,6 +160,16 @@ function buildMenu() {
         { label: 'Centralizar verticalmente', click: () => widget.resetPosition() },
       ],
     },
+    {
+      label: 'Token e consumo',
+      submenu: [
+        { label: 'Renovar token automaticamente', type: 'checkbox', checked: store.get('autoRenew'), click: (i) => { store.set('autoRenew', i.checked); rebuildMenu(); } },
+        { label: 'Permitir renovação com requisição mínima (gasta um pouco de uso)', type: 'checkbox', checked: store.get('autoRenewPaid'), enabled: store.get('autoRenew'), click: (i) => store.set('autoRenewPaid', i.checked) },
+        { label: 'Plano B se o formato mudar (gasta um pouco de uso)', type: 'checkbox', checked: store.get('paidFallback'), click: (i) => store.set('paidFallback', i.checked) },
+        { type: 'separator' },
+        { label: renewalLabel(), enabled: false },
+      ],
+    },
     { type: 'separator' },
     {
       label: 'Iniciar com o Windows',
@@ -147,6 +187,24 @@ function buildMenu() {
     { type: 'separator' },
     { label: 'Sair', click: () => app.quit() },
   ]);
+}
+
+function renewalLabel() {
+  if (tokenRefresher.isRunning()) return 'Renovando token…';
+  if (!lastRenewal) return 'Nenhuma renovação nesta execução';
+  const when = new Date(lastRenewal.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (lastRenewal.ok) {
+    const how = { free: 'sem custo', paid: 'requisição mínima', none: 'já estava válido' }[lastRenewal.tier] || '';
+    return `Última renovação: ${when} (${how})`;
+  }
+  const why = {
+    'no-cli': 'Claude Code não encontrado',
+    'paid-disabled': 'requisição mínima desligada',
+    'cli-open': 'aguardando o Claude Code aberto',
+    'not-renewed': 'o Claude Code não renovou',
+    cooldown: 'aguardando para tentar de novo',
+  }[lastRenewal.reason] || 'erro';
+  return `Renovação falhou às ${when}: ${why}`;
 }
 
 function rebuildMenu() {
@@ -218,6 +276,7 @@ app.whenReady().then(() => {
     store.set('autostart', true);
   }
   applyAutostart();
+  watchCredentials();
   refresh();
 });
 

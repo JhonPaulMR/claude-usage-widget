@@ -3,6 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { parseRetryAfter } = require('./schedule');
 
 const CRED_PATH = path.join(os.homedir(), '.claude', '.credentials.json');
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
@@ -10,7 +11,8 @@ const MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const TIMEOUT_MS = 15000;
 
 class UsageError extends Error {
-  // kind: 'auth' | 'network' | 'format' | 'ratelimit'
+  // kind: 'auth' | 'network' | 'server' | 'format' | 'ratelimit'
+  // expired: token vencido (dá para renovar); retryAfterSec: espera pedida pelo servidor num 429
   constructor(kind, message) {
     super(message);
     this.kind = kind;
@@ -26,9 +28,21 @@ function readToken(now = Date.now()) {
   }
   if (!raw || !raw.accessToken) throw new UsageError('auth', 'Sem token no arquivo de credenciais');
   if (raw.expiresAt && raw.expiresAt < now) {
-    throw new UsageError('auth', 'Token expirado — abra o Claude Code para renovar');
+    const err = new UsageError('auth', 'Token expirado — abra o Claude Code para renovar');
+    err.expired = true;
+    throw err;
   }
   return raw.accessToken;
+}
+
+// Validade do token em ms (epoch), ou null se não der para ler. Nunca devolve o token.
+function readExpiry() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(CRED_PATH, 'utf8')).claudeAiOauth;
+    return raw && typeof raw.expiresAt === 'number' ? raw.expiresAt : null;
+  } catch {
+    return null;
+  }
 }
 
 function toMs(v) {
@@ -94,7 +108,15 @@ function classifyStatus(res) {
   if (res.status === 401 || res.status === 403) {
     return new UsageError('auth', 'Sessão expirada — abra o Claude Code');
   }
-  if (res.status === 429) return new UsageError('ratelimit', 'Muitas consultas, aguardando');
+  if (res.status === 429) {
+    const err = new UsageError('ratelimit', 'Muitas consultas, aguardando');
+    err.retryAfterSec = parseRetryAfter(res.headers && res.headers.get('retry-after'));
+    return err;
+  }
+  // 5xx (e 408) é falha passageira do servidor: tenta de novo, sem acionar o plano B.
+  if (res.status >= 500 || res.status === 408) {
+    return new UsageError('server', `Servidor indisponível (HTTP ${res.status})`);
+  }
   return new UsageError('format', `Resposta HTTP ${res.status}`);
 }
 
@@ -116,7 +138,8 @@ async function fetchViaUsageEndpoint(token) {
   return normalizeOauth(json);
 }
 
-// Gasta uma quantidade mínima de uso (1 token). Só roda se o endpoint principal falhar por formato.
+// Gasta uma quantidade mínima de uso (1 token). Só roda se o endpoint principal mudar de formato
+// E o usuário tiver ligado o plano B (desligado por padrão).
 async function fetchViaHeaders(token) {
   const res = await request(MESSAGES_URL, {
     method: 'POST',
@@ -140,12 +163,12 @@ async function fetchViaHeaders(token) {
   return normalizeHeaders(res.headers);
 }
 
-async function fetchUsage() {
+async function fetchUsage({ allowPaidFallback = false } = {}) {
   const token = readToken();
   try {
     return await fetchViaUsageEndpoint(token);
   } catch (e) {
-    if (e.kind !== 'format') throw e;
+    if (e.kind !== 'format' || !allowPaidFallback) throw e;
     return fetchViaHeaders(token);
   }
 }
@@ -163,4 +186,4 @@ function fetchDemo(now = Date.now()) {
   };
 }
 
-module.exports = { fetchUsage, fetchDemo, normalizeOauth, normalizeHeaders, UsageError };
+module.exports = { fetchUsage, fetchDemo, normalizeOauth, normalizeHeaders, classifyStatus, readExpiry, UsageError, CRED_PATH };

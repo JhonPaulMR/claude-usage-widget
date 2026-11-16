@@ -8,7 +8,7 @@ const els = {
   models: $('models'),
 };
 
-let usage = { state: 'loading', data: null, fetchedAt: null, message: '' };
+let usage = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
 let open = false;
 let pinned = false;
 let leaveTimer = null;
@@ -61,7 +61,7 @@ function cardHtml(name, item, now) {
 function render() {
   const now = Date.now();
   const d = usage.data;
-  const stale = usage.state === 'offline' || usage.state === 'auth' || usage.state === 'format' || (usage.state === 'loading' && !d);
+  const stale = usage.state === 'offline' || usage.state === 'server' || usage.state === 'auth' || usage.state === 'format' || (usage.state === 'loading' && !d);
   els.widget.classList.toggle('stale', stale);
 
   setRing('session', d && d.session, stale);
@@ -73,17 +73,31 @@ function render() {
     .map((m) => `<div class="model"><span>${m.label} (semanal)</span><b>${Math.round(m.pct)}%</b></div>`)
     .join('');
 
+  const soft = usage.state === 'offline' || usage.state === 'loading' || usage.state === 'ratelimit' || usage.state === 'server';
+  els.updated.textContent = usage.state === 'auth'
+    ? (usage.renewing ? 'Pedindo ao Claude Code para renovar o token' : usage.message || '')
+    : `Atualizado às ${fmt.formatClock(usage.fetchedAt)}`;
+  els.status.className = `head-status ${usage.state === 'ok' ? '' : soft ? 'off' : 'err'}`;
+  els.status.title = usage.message;
+  renderStatus(now);
+  syncHeight();
+}
+
+// Texto do estado. Fora do "ao vivo", mostra quanto falta para a próxima tentativa.
+function renderStatus(now) {
+  const d = usage.data;
+  const wait = usage.nextAt && usage.nextAt > now ? ` · ${fmt.formatMmSs(usage.nextAt - now)}` : '';
   const msgs = {
+    ok: 'ao vivo',
     loading: d ? 'atualizando' : 'carregando',
-    offline: 'sem conexão',
-    auth: 'sessão expirada',
+    offline: `sem conexão${wait}`,
+    server: `servidor fora${wait}`,
+    ratelimit: `limitado${wait}`,
+    auth: usage.renewing ? 'renovando token' : 'sessão expirada',
     format: 'formato inesperado',
   };
-  els.updated.textContent = usage.state === 'auth' ? (usage.message || '') : `Atualizado às ${fmt.formatClock(usage.fetchedAt)}`;
-  els.status.className = `head-status ${usage.state === 'ok' ? '' : usage.state === 'offline' || usage.state === 'loading' ? 'off' : 'err'}`;
-  els.status.textContent = usage.state === 'ok' ? 'ao vivo' : msgs[usage.state] || '';
-  els.status.title = usage.message;
-  syncHeight();
+  const text = msgs[usage.state] || '';
+  if (els.status.textContent !== text) els.status.textContent = text;
 }
 
 // countdown local, a cada segundo, sem rede
@@ -93,6 +107,7 @@ function tick() {
     const t = Number(el.dataset.cd);
     if (t) el.textContent = fmt.formatCountdown(t - now);
   });
+  renderStatus(now);
 }
 setInterval(tick, 1000);
 // recalcula ritmo/horários a cada 30 s

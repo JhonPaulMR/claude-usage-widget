@@ -13,8 +13,11 @@ const DEFAULTS = {
   top: null, // posição vertical (px, relativa à tela); null = centralizado
   displayId: null,
   demo: false,
+  autoRenew: true, // token vencido: pede ao Claude Code para renovar
+  autoRenewPaid: true, // permite a requisição mínima (Haiku) se o comando gratuito não renovar
+  paidFallback: false, // plano B via /v1/messages quando o formato do endpoint mudar
   last: null, // { data, fetchedAt }
-  history: [], // últimas amostras { t, session, weekly }
+  history: [], // últimas amostras { t, s, w }
 };
 
 function createStore(dir) {
