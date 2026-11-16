@@ -15,6 +15,19 @@ Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já 
 
 **Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist`), usar por um dia e conferir os itens de "Como testar a etapa 1". Só depois começar a etapa 2.
 
+### Para continuar em outro PC
+
+```bash
+git clone https://github.com/JhonPaulMR/claude-usage-widget.git
+cd claude-usage-widget
+git checkout etapa-1-atualizacao
+npm install
+npm test
+npm run dist
+```
+
+O instalador (`dist/`) e os ícones (`build/`) não vão para o repositório; `npm run dist` gera os dois. A etapa 1 ainda não foi testada instalada nem mesclada na `main`.
+
 Regra de entrega: uma etapa por branch, um commit por etapa, lógica pura com testes em `node --test`, instalador ao fim de cada etapa, e só se avança depois do teste do usuário. O README é atualizado no final.
 
 ## Etapa 1: atualização (feita)
