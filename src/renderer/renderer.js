@@ -53,7 +53,7 @@ function cardHtml(name, item, now) {
   return `
     <div class="row"><span class="title">${TITLES[name]}</span>
       <span class="pct t-${band}">${pct == null ? '—' : Math.round(pct) + '<small>%</small>'}</span></div>
-    <div class="bar"><i class="b-${band}" style="width:${pct == null ? 0 : pct}%"></i></div>
+    <div class="bar"><i class="b-${band}" data-w="${pct == null ? 0 : pct}"></i></div>
     <div class="sub">reseta em <b data-cd="${item && item.resetsAt || ''}">${countdown}</b> · ${at}</div>
     <div class="sub pace ${pace.level}">${pace.text}</div>`;
 }
@@ -69,6 +69,8 @@ function render() {
 
   $('card-session').innerHTML = cardHtml('session', d && d.session, now);
   $('card-weekly').innerHTML = cardHtml('weekly', d && d.weekly, now);
+  // A política de segurança da página bloqueia style="" no HTML; a largura entra por JavaScript.
+  document.querySelectorAll('.bar > i').forEach((el) => { el.style.width = `${el.dataset.w}%`; });
   els.models.innerHTML = ((d && d.models) || [])
     .map((m) => `<div class="model"><span>${m.label} (semanal)</span><b>${Math.round(m.pct)}%</b></div>`)
     .join('');
@@ -102,6 +104,7 @@ function renderStatus(now) {
 
 // countdown local, a cada segundo, sem rede
 function tick() {
+  if (moving) return;
   const now = Date.now();
   document.querySelectorAll('[data-cd]').forEach((el) => {
     const t = Number(el.dataset.cd);
@@ -113,44 +116,55 @@ setInterval(tick, 1000);
 // recalcula ritmo/horários a cada 30 s
 setInterval(() => usage.data && renderSoon(), 30000);
 
-// Não reescreve o DOM no meio da animação de abrir/recolher (evita engasgo).
-let lastToggle = 0;
+// Durante a animação de abrir/recolher nada escreve no DOM: o relógio pula a vez e o render espera.
+const MOVE_MS = 480;
+let moving = false;
+let moveTimer = null;
+let renderPending = false;
 function renderSoon() {
-  const wait = lastToggle + 700 - Date.now();
-  if (wait > 0) setTimeout(renderSoon, wait);
+  if (moving) renderPending = true;
   else render();
+}
+function setOpen(v) {
+  if (v === open) return;
+  open = v;
+  moving = true;
+  els.widget.classList.add('moving');
+  els.widget.classList.toggle('open', v);
+  clearTimeout(moveTimer);
+  moveTimer = setTimeout(() => {
+    moving = false;
+    els.widget.classList.remove('moving');
+    if (renderPending) { renderPending = false; render(); } else tick();
+  }, MOVE_MS);
 }
 
 // ---------- expandir / recolher ----------
-// Janela fixa e transparente; o clip-path do .widget faz a animação. Fora do widget a janela
-// ignora o mouse (click-through) mas continua recebendo mousemove para detectar o hover.
+// Janela fixa e transparente; fora do widget ela ignora o mouse (click-through) mas continua
+// recebendo mousemove para detectar o hover.
 const TAB_W = 72, TAB_H = 220;
 let ignoring = true;
+let fullW = 0, fullH = 0; // medidas guardadas: o mousemove não lê layout
 function setIgnore(v) {
   if (v === ignoring) return;
   ignoring = v;
   window.widget.setIgnore(v);
 }
 function syncHeight() {
-  const full = els.widget.offsetHeight;
-  els.widget.style.setProperty('--cb', `${Math.max(0, full - TAB_H)}px`);
+  fullW = els.widget.offsetWidth;
+  fullH = els.widget.offsetHeight;
+  els.widget.style.setProperty('--cb', `${Math.max(0, fullH - TAB_H)}px`);
 }
 function expand() {
   clearTimeout(leaveTimer);
-  if (!open) lastToggle = Date.now();
-  open = true;
-  els.widget.classList.add('open');
+  setOpen(true);
 }
 function collapse() {
   if (!open || pinned || dragging) return;
-  open = false;
-  lastToggle = Date.now();
-  els.widget.classList.remove('open');
+  setOpen(false);
 }
 function hit(x, y) {
-  const w = els.widget.offsetWidth;
-  const left = window.innerWidth - w;
-  if (open) return x >= left && y <= els.widget.offsetHeight;
+  if (open) return x >= window.innerWidth - fullW && y <= fullH;
   return x >= window.innerWidth - TAB_W && y <= TAB_H;
 }
 function onPointer(x, y) {
@@ -213,14 +227,7 @@ window.widget.onUsage((p) => { usage = p; renderSoon(); });
 window.widget.onPrefs((p) => { document.body.dataset.theme = p.theme || 'dark'; });
 render();
 syncHeight();
-requestAnimationFrame(() => requestAnimationFrame(() => {
-  els.widget.classList.remove('init');
-  // Aquecimento: roda uma abertura/fechamento invisível para o Chromium já ter as camadas rasterizadas,
-  // evitando o engasgo no primeiro hover.
-  els.widget.classList.add('warm', 'open');
-  setTimeout(() => els.widget.classList.remove('open'), 550);
-  setTimeout(() => els.widget.classList.remove('warm'), 1150);
-}));
+requestAnimationFrame(() => requestAnimationFrame(() => els.widget.classList.remove('init')));
 window.widget.ready();
 
 // Diagnóstico: mede o tempo entre frames durante expandir/recolher (usado por `electron . --perf`).
@@ -232,7 +239,7 @@ window.__perf = (nofx) => new Promise((resolve) => {
     const deltas = [];
     let last = performance.now();
     const end = last + 900;
-    if (toOpen) els.widget.classList.add('open'); else els.widget.classList.remove('open');
+    setOpen(toOpen);
     (function loop(t) {
       deltas.push(t - last); last = t;
       if (t < end) requestAnimationFrame(loop); else done(deltas);

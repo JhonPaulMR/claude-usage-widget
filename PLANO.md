@@ -7,26 +7,28 @@ Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já 
 | Etapa | Assunto | Situação | Branch |
 |---|---|---|---|
 | 1 | Atualização (429, 5xx, token) | Implementada, aguardando teste do usuário | `etapa-1-atualizacao` |
-| 2 | Animação de abrir e fechar | A fazer | |
+| 2 | Animação de abrir e fechar | Implementada, aguardando teste do usuário | `etapa-2-animacao` |
 | 3 | Histórico e previsão | A fazer | |
 | 4 | Gráficos e tela de configurações | A fazer | |
 | 5 | Multi-monitor | A fazer | |
 | 6 | Mascote | A fazer | |
 
-**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist`), usar por um dia e conferir os itens de "Como testar a etapa 1". Só depois começar a etapa 2.
+**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-2-animacao`, que contém a etapa 1), usar por um dia e conferir "Como testar a etapa 1" e "Como testar a etapa 2". Só depois começar a etapa 3.
+
+A etapa 2 foi iniciada a pedido do usuário antes do teste instalado da etapa 1; por isso a branch `etapa-2-animacao` parte de `etapa-1-atualizacao` e as duas são testadas juntas.
 
 ### Para continuar em outro PC
 
 ```bash
 git clone https://github.com/JhonPaulMR/claude-usage-widget.git
 cd claude-usage-widget
-git checkout etapa-1-atualizacao
+git checkout etapa-2-animacao
 npm install
 npm test
 npm run dist
 ```
 
-O instalador (`dist/`) e os ícones (`build/`) não vão para o repositório; `npm run dist` gera os dois. A etapa 1 ainda não foi testada instalada nem mesclada na `main`.
+O instalador (`dist/`) e os ícones (`build/`) não vão para o repositório; `npm run dist` gera os dois. As etapas 1 e 2 ainda não foram testadas instaladas nem mescladas na `main`.
 
 Regra de entrega: uma etapa por branch, um commit por etapa, lógica pura com testes em `node --test`, instalador ao fim de cada etapa, e só se avança depois do teste do usuário. O README é atualizado no final.
 
@@ -67,7 +69,7 @@ Regra de entrega: uma etapa por branch, um commit por etapa, lógica pura com te
 2. Em uso normal: nunca ficar parado mostrando "ao vivo" com horário antigo. Se houver limite de consultas, aparece "limitado" com a contagem.
 3. Desligar a rede por um minuto: "sem conexão" com contagem, e volta sozinho.
 
-## Etapa 2: animação
+## Etapa 2: animação (feita)
 
 **Causa:** a abertura anima `clip-path` com cantos arredondados, o que repinta o painel inteiro a cada quadro numa janela transparente. Há ainda `drop-shadow` nos anéis, leituras de layout a cada `mousemove` e o relógio de 1 s escrevendo durante a transição.
 
@@ -79,6 +81,31 @@ Regra de entrega: uma etapa por branch, um commit por etapa, lógica pura com te
 - Se ainda travar, o gargalo é a janela transparente; aí se decide reduzir a área da janela, com a medição em mãos.
 
 **Defeito encontrado para corrigir junto:** a política de segurança da página (`style-src 'self'`) bloqueia o `style="width:…"` das barras em `cardHtml` (`renderer.js`), então as barras de progresso do painel não recebem largura. Corrigir aplicando a largura por JavaScript (`el.style.width`) depois de montar o HTML.
+
+### O que mudou
+
+- `index.html` e `styles.css`: o widget ganhou duas camadas internas (`.clip-y` e `.surface`). `.widget` recorta na horizontal e `.clip-y` na vertical, ambos com `overflow: hidden` fixo e animados só por `transform`; a `.surface` recebe o deslocamento inverso, então o conteúdo fica parado e a aparência é a mesma de antes. O `clip-path` saiu.
+- `renderer.js`: `setOpen()` centraliza abrir e recolher e marca a classe `moving` por 480 ms. Nesse período o relógio de 1 s pula a vez, o re-render fica pendente e os anéis ficam sem sombra e com o pulso parado.
+- O `mousemove` não lê mais layout: largura e altura ficam guardadas em `syncHeight()`.
+- O "aquecimento" da inicialização foi removido.
+- As barras de progresso recebem a largura por JavaScript (antes ficavam sempre vazias).
+
+### Medição (`electron . --perf --demo`, monitor de 144 Hz, 16/11/2026)
+
+| | Primeira abertura: pior quadro | Quadros acima de 20 ms | Demais execuções: pior quadro |
+|---|---|---|---|
+| Antes (com aquecimento) | 111,3 ms | 4 | 7,4 a 9,2 ms |
+| Depois, 1ª medição | 20,9 ms | 1 | 7,4 a 8,1 ms |
+| Depois, 2ª medição | 7,5 ms | 0 | 7,6 a 9,2 ms |
+
+A medição conta o intervalo entre quadros na thread principal; não enxerga engasgo que aconteça só no compositor. Por isso o teste visual abaixo continua valendo.
+
+### Como testar a etapa 2
+
+1. Logo depois de iniciar o widget, passar o mouse na aba: a primeira abertura deve ser fluida.
+2. Abrir e recolher várias vezes, com a sessão acima de 90% (anel pulsando) se possível.
+3. Conferir que as barras de progresso dos cartões aparecem preenchidas.
+4. Se ainda travar, rodar `npx electron . --perf --demo` com o instalado fechado e anotar os números; o próximo suspeito é a janela transparente.
 
 ## Etapa 3: histórico e previsão
 
