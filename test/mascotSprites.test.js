@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { MASCOT_W, MASCOT_H, MASCOT_COLORS, MASCOT_POSES, mirrorFrame } = require('../src/shared/mascotSprites');
+const { MASCOT_W, MASCOT_H, MASCOT_COLORS, MASCOT_POSES, mirrorFrame, blinkFrame } = require('../src/shared/mascotSprites');
 
 const EXPECTED = ['neutro', 'feliz', 'cansado', 'preocupado', 'confuso', 'morto', 'andando', 'caindo', 'falando'];
 
@@ -44,6 +44,23 @@ test('só o morto é cinza; os outros têm corpo laranja e dois olhos', () => {
     assert.equal(text.includes('o'), name !== 'morto', name);
     assert.ok((text.match(/k/g) || []).length >= 4, `${name}: olhos`);
   }
+});
+
+test('blinkFrame: o olho fecha mas nunca some, em nenhuma pose', () => {
+  const dark = (frame) => (frame.join('').match(/k/g) || []).length;
+  for (const [name, frames] of Object.entries(MASCOT_POSES)) {
+    frames.forEach((frame, i) => {
+      const closed = blinkFrame(frame);
+      assert.ok(dark(closed) >= 2, `${name}[${i}] ficou sem olhos`);
+      assert.ok(dark(closed) <= dark(frame), `${name}[${i}]`);
+      assert.equal(closed.length, MASCOT_H);
+      closed.forEach((row) => assert.equal(row.length, MASCOT_W));
+    });
+  }
+  // olho vertical de 2 px: sobra o pixel de baixo
+  const neutro = blinkFrame(MASCOT_POSES.neutro[0]);
+  assert.equal(neutro[7], '..oooooooooooo..');
+  assert.equal(neutro[8], '..ookooooookoo..');
 });
 
 test('mirrorFrame espelha e é o próprio inverso', () => {

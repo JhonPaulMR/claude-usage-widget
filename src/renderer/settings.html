@@ -49,6 +49,28 @@
           <option value="often">Frequente</option>
         </select>
       </label>
+      <label class="field">
+        <span>Reação do mascote<small>Automática segue o uso. Também dá para trocar pelo botão direito nele.</small></span>
+        <select data-key="mascotEmote" data-enabled-when="mode=mascot">
+          <option value="auto">Automática</option>
+          <option value="neutro">Neutro</option>
+          <option value="feliz">Feliz</option>
+          <option value="cansado">Cansado</option>
+          <option value="preocupado">Preocupado</option>
+          <option value="confuso">Confuso</option>
+          <option value="morto">Morto</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Tecla para chamar o mascote<small id="callKeyHint">Ele vai andando até onde o mouse aponta (só no modo passeio).</small></span>
+        <select data-key="mascotCallKey" data-enabled-when="mascotMove=walk">
+          <option value="Control+Alt+M">Ctrl+Alt+M</option>
+          <option value="Control+Shift+M">Ctrl+Shift+M</option>
+          <option value="Control+Alt+Space">Ctrl+Alt+Espaço</option>
+          <option value="F8">F8</option>
+          <option value="none">Nenhuma</option>
+        </select>
+      </label>
       <label class="check"><input type="checkbox" data-key="mascotNotify" data-enabled-when="mode=mascot" /><span>Além da fala do mascote, mostrar a notificação do Windows</span></label>
     </section>
 

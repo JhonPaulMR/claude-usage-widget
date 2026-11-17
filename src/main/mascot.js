@@ -66,7 +66,13 @@ function createMascot(opts) {
   let walkTimer = null;
   let dragOrigin = null;
 
+  let speed = logic.WALK_SPEED;
+  let stopAtEdge = false; // indo até o mouse: para na borda em vez de dar meia-volta
+
   // o que ele mostra
+  let realEmotion = 'feliz'; // a que vem do uso
+  let tempEmote = null; // reação escolhida por um tempo
+  let tempTimer = null;
   let emotion = 'feliz';
   let summary = '';
   let speech = null;
@@ -119,7 +125,7 @@ function createMascot(opts) {
 
   function push() {
     if (!win || win.isDestroyed()) return;
-    win.webContents.send('mascot:state', { pose: pose(), dir, emotion, speech, summary, room: bubbleRoom(), theme: store.get('theme') });
+    win.webContents.send('mascot:state', { pose: pose(), fast: mode === 'walk' && speed > logic.WALK_SPEED, dir, emotion, speech, summary, room: bubbleRoom(), theme: store.get('theme') });
   }
 
   // ---------- relógio de movimento: só roda enquanto ele anda ou está no ar ----------
@@ -146,7 +152,7 @@ function createMascot(opts) {
     const dt = Math.min(0.05, (now - lastTick) / 1000);
     lastTick = now;
     if (mode === 'walk') {
-      const r = logic.stepWalk({ cx: pos.cx, dir, left }, dt, cur, displays());
+      const r = logic.stepWalk({ cx: pos.cx, dir, left, speed, stopAtEdge }, dt, cur, displays());
       pos.cx = r.cx;
       if (r.type === 'walk') {
         if (r.dir !== dir) { dir = r.dir; push(); }
@@ -208,6 +214,8 @@ function createMascot(opts) {
     const plan = logic.planWalk();
     dir = plan.dir;
     left = plan.distance;
+    speed = logic.WALK_SPEED;
+    stopAtEdge = false;
     mode = 'walk';
     push();
     startTicker();
@@ -306,7 +314,8 @@ function createMascot(opts) {
       focusable: false,
       hasShadow: false,
       show: false,
-      webPreferences: { preload: path.join(__dirname, 'mascotPreload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+      // sem economia de temporizadores em segundo plano: o piscar e a troca de quadros dependem deles
+      webPreferences: { preload: path.join(__dirname, 'mascotPreload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
     });
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setIgnoreMouseEvents(true, { forward: true });
@@ -336,6 +345,12 @@ function createMascot(opts) {
     else { place(); savePos(); push(); }
   }
 
+  function applyEmotion() {
+    emotion = logic.shownEmotion(realEmotion, store.get('mascotEmote'), tempEmote);
+    if (emotion === 'morto') halt();
+    push();
+  }
+
   create();
 
   const isMascot = (wc) => !!(win && !win.isDestroyed() && wc === win.webContents);
@@ -347,22 +362,48 @@ function createMascot(opts) {
     onDisplaysChanged,
     // Dados novos: recalcula emoção e resumo. Morto não anda.
     update(payload) {
-      emotion = logic.emotion(payload);
+      realEmotion = logic.emotion(payload);
       summary = logic.summary(payload);
-      if (emotion === 'morto') halt();
+      applyEmotion();
+    },
+    // Reação escolhida no menu por alguns segundos (null cancela). A fixa fica na preferência mascotEmote.
+    setTempEmote(name, ms = 30000) {
+      clearTimeout(tempTimer);
+      tempEmote = logic.EMOTES.includes(name) ? name : null;
+      if (tempEmote) tempTimer = setTimeout(() => { tempEmote = null; applyEmotion(); scheduleWalk(); }, ms);
+      applyEmotion();
+    },
+    tempEmote: () => tempEmote,
+    // Atalho global: vai andando (mais rápido) até onde o mouse aponta. Só no modo passeio.
+    // Devolve o motivo quando não vai: 'fixed', 'dead', 'busy' ou 'there'.
+    goTo(point) {
+      if (!walking()) return 'fixed';
+      if (emotion === 'morto') return 'dead';
+      if (mode === 'air' || mode === 'drag' || !win || win.isDestroyed() || !win.isVisible()) return 'busy';
+      const plan = logic.planGoTo(pos.cx, point.x);
+      if (!plan) return 'there';
+      closeBalloon();
+      clearTimeout(walkTimer);
+      dir = plan.dir;
+      left = plan.distance;
+      speed = logic.RUN_SPEED;
+      stopAtEdge = true;
+      mode = 'walk';
       push();
+      startTicker();
+      return 'going';
     },
     // Alerta virando fala.
     say(text) {
       speech = String(text || '').slice(0, 140);
-      halt();
+      if (!stopAtEdge) halt(); // chamado até o mouse, ele fala andando; no passeio comum, para
       push();
       clearTimeout(speechTimer);
       speechTimer = setTimeout(() => { speech = null; push(); scheduleWalk(); }, SPEECH_MS);
     },
     // Preferência de movimento ou de frequência mudou.
     refreshPrefs() {
-      push();
+      applyEmotion();
       if (mode === 'drag') return;
       if (walking()) {
         if (mode === 'idle') dropToGround();
@@ -434,6 +475,7 @@ function createMascot(opts) {
       clearTimeout(walkTimer);
       clearTimeout(speechTimer);
       clearTimeout(balloonTimer);
+      clearTimeout(tempTimer);
       if (pos) savePos();
       if (win && !win.isDestroyed()) win.destroy();
       if (balloon && !balloon.isDestroyed()) balloon.destroy();
@@ -443,6 +485,8 @@ function createMascot(opts) {
       if (mode !== 'idle') return;
       dir = d;
       left = distance;
+      speed = logic.WALK_SPEED;
+      stopAtEdge = false;
       mode = 'walk';
       push();
       startTicker();

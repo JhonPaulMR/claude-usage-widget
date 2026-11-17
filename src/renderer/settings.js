@@ -51,6 +51,9 @@ function apply(next) {
   document.getElementById('autostart').disabled = !state.packaged;
   document.getElementById('autostartHint').hidden = state.packaged;
   document.getElementById('renewal').textContent = state.renewal;
+  document.getElementById('callKeyHint').textContent = state.callKeyFailed
+    ? 'Outro programa já usa esse atalho. Escolha outro.'
+    : 'Ele vai andando até onde o mouse aponta (só no modo passeio).';
   document.getElementById('about').textContent = `Versão ${state.version} · ${state.shortcut} mostra ou oculta o widget`;
 }
 

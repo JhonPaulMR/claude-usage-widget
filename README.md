@@ -65,13 +65,15 @@ Troque em **Configurações → Modo de exibição** ou no menu. As abas da bord
 - **Passar o mouse:** mostra um resumo ("Sessão 62%, reset em 1h40").
 - **Clicar:** abre o painel completo em um balão ao lado dele.
 - **Arrastar:** leva o mascote para outro lugar.
+- **`Ctrl+Alt+M`:** ele corre até onde o mouse aponta (só no modo passeio; a tecla pode ser trocada ou desligada).
+- **Botão direito → Reação:** deixa a reação automática, fixa uma ou mostra uma por 30 segundos.
 - **Alertas:** viram fala do mascote; a notificação do Windows continua, a menos que seja desligada.
 
 ## Configurações
 Botão direito no widget, no mascote ou no ícone da bandeja → **Configurações**. Cada opção vale na hora.
 
 - **Atualização:** intervalo de 30 s, 1, 2 ou 5 min. Cada ponto do gráfico é uma consulta.
-- **Modo de exibição:** clássico ou mascote; movimento e frequência do passeio.
+- **Modo de exibição:** clássico ou mascote; movimento e frequência do passeio, reação e tecla de chamar.
 - **Gráficos:** separados, combinados (com janela de 1 h, 5 h, 24 h ou 7 dias), só sessão ou só semanal.
 - **Modo compacto:** itens da aba recolhida.
 - **Alertas:** dois limiares de porcentagem editáveis e o aviso de previsão menor que 15 minutos.

@@ -4,20 +4,21 @@
 const POSES = window.mascot.MASCOT_POSES;
 const COLORS = window.mascot.MASCOT_COLORS;
 const flip = window.mascot.mirrorFrame;
+const closeEyes = window.mascot.blinkFrame;
 
 const actor = document.getElementById('actor');
 const squash = document.getElementById('squash');
 const bubble = document.getElementById('bubble');
 const ctx = document.getElementById('sprite').getContext('2d');
 
-let state = { pose: 'idle', dir: 1, emotion: 'feliz', speech: null, summary: '', room: null, theme: 'dark' };
+let state = { pose: 'idle', fast: false, dir: 1, emotion: 'feliz', speech: null, summary: '', room: null, theme: 'dark' };
 let frameIndex = 0;
 let frameTimer = null;
 let blinking = false;
 let hovering = false;
 let hoverTimer = null;
 
-const FRAME_MS = { andando: 120, falando: 240 };
+const FRAME_MS = { andando: 120, 'andando-rapido': 70, falando: 240 };
 const BLINKERS = ['neutro', 'andando', 'falando', 'preocupado', 'confuso'];
 
 // Qual desenho e qual animação usar agora.
@@ -25,7 +26,7 @@ function look() {
   if (state.emotion === 'morto') return { sprite: 'morto', anim: state.pose === 'drag' ? 'a-drag' : 'a-morto' };
   if (state.pose === 'drag') return { sprite: 'caindo', anim: 'a-drag' };
   if (state.pose === 'air') return { sprite: 'caindo', anim: 'a-air' };
-  if (state.pose === 'walk') return { sprite: 'andando', anim: 'a-walk' };
+  if (state.pose === 'walk') return { sprite: 'andando', anim: state.fast ? 'a-run' : 'a-walk', pace: state.fast ? 'andando-rapido' : 'andando' };
   if (state.pose === 'talk') return { sprite: 'falando', anim: 'a-talk' };
   return { sprite: state.emotion, anim: `a-${state.emotion}` };
 }
@@ -34,13 +35,13 @@ function draw() {
   const { sprite } = look();
   const frames = POSES[sprite] || POSES.neutro;
   let frame = frames[frameIndex % frames.length];
+  if (blinking) frame = closeEyes(frame); // piscar: o olho fecha, sem sumir
   if (state.dir < 0) frame = flip(frame);
   ctx.clearRect(0, 0, 16, 15);
   frame.forEach((row, y) => {
     for (let x = 0; x < row.length; x++) {
-      let ch = row[x];
+      const ch = row[x];
       if (ch === '.') continue;
-      if (blinking && ch === 'k') ch = 'o'; // piscar: os olhos somem por um instante
       ctx.fillStyle = ch === 'w' && state.theme === 'light' ? COLORS.k : COLORS[ch];
       ctx.fillRect(x, y, 1, 1);
     }
@@ -62,11 +63,12 @@ function apply(next) {
   document.body.dataset.theme = state.theme || 'dark';
 
   if (now.anim !== before.anim || !actor.classList.contains(now.anim)) actor.className = `actor ${now.anim}`;
-  if (now.sprite !== before.sprite) {
-    frameIndex = 0;
+  const pace = (l) => l.pace || l.sprite;
+  if (pace(now) !== pace(before)) {
+    if (now.sprite !== before.sprite) frameIndex = 0;
     clearInterval(frameTimer);
     frameTimer = null;
-    if (FRAME_MS[now.sprite]) frameTimer = setInterval(() => { frameIndex++; draw(); }, FRAME_MS[now.sprite]);
+    if (FRAME_MS[pace(now)]) frameTimer = setInterval(() => { frameIndex++; draw(); }, FRAME_MS[pace(now)]);
   }
   if (prev.pose === 'air' && state.pose !== 'air' && state.pose !== 'drag') playOnce('fx-land');
   else if (prev.emotion !== state.emotion && state.pose === 'idle') playOnce('fx-pop');

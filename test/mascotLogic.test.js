@@ -92,6 +92,27 @@ test('stepWalk: recém-chegado a um monitor, encostado na borda de trás, segue 
   assert.ok(r.cx < 1914);
 });
 
+test('stepWalk: velocidade de corrida e parar na borda quando vai até o mouse', () => {
+  const run = m.stepWalk({ cx: 500, dir: 1, left: 400, speed: m.RUN_SPEED }, 0.1, A, [A]);
+  assert.ok(Math.abs(run.cx - 520) < 1e-9);
+  const edge = m.stepWalk({ cx: 1920 - m.HALF_W - 1, dir: 1, left: 400, stopAtEdge: true }, 0.1, A, [A]);
+  assert.equal(edge.type, 'done');
+  assert.equal(edge.cx, 1920 - m.HALF_W);
+});
+
+test('planGoTo: direção e distância até o ponteiro; perto demais não anda', () => {
+  assert.deepEqual(m.planGoTo(500, 900), { dir: 1, distance: 400 });
+  assert.deepEqual(m.planGoTo(500, 100), { dir: -1, distance: 400 });
+  assert.equal(m.planGoTo(500, 505), null);
+});
+
+test('shownEmotion: temporária > fixada > a que vem do uso', () => {
+  assert.equal(m.shownEmotion('cansado', 'auto', null), 'cansado');
+  assert.equal(m.shownEmotion('cansado', 'feliz', null), 'feliz');
+  assert.equal(m.shownEmotion('cansado', 'feliz', 'confuso'), 'confuso');
+  assert.equal(m.shownEmotion('cansado', 'qualquer', 'outra'), 'cansado');
+});
+
 test('stepAir: cai com gravidade, pousa só descendo, e o pulo alcança o chão mais alto', () => {
   let s = { cx: 100, foot: 500, vx: 0, vy: 0 };
   let t = 0;

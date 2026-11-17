@@ -259,6 +259,26 @@ Todo movimento do corpo é animação CSS de `transform`, que roda no compositor
 - **Vizinho:** só monitor colado na lateral conta. Monitor em cima ou embaixo não é caminho.
 - **Fala:** dura 7 s e ele para de andar enquanto fala.
 
+### Ajustes depois do primeiro teste do usuário
+
+- **Olhos sumindo:** era o piscar. Ele apagava todos os pixels escuros por cerca de 130 ms (medido quadro a quadro: 6 ocorrências em 7.126 quadros, todas durante o piscar), e no "preocupado" apagava também as sobrancelhas. Agora `blinkFrame()` fecha cada olho até sobrar o pixel de baixo; um teste garante que nenhuma pose fica sem olhos. Na nova medição, 0 ocorrências em 10.618 quadros. A janela do mascote também deixou de ter os temporizadores reduzidos em segundo plano.
+- **Chamar até o mouse:** atalho global (padrão `Ctrl+Alt+M`, trocável ou desligável nas configurações) e item "Vir até o mouse" no botão direito. Ele corre (200 px/s) até a posição horizontal do ponteiro, atravessa monitores marcados e para na borda se o ponteiro estiver fora do alcance. Só no modo passeio; no fixo ele avisa por fala. O atalho só fica registrado no modo mascote.
+- **Reações escolhidas:** botão direito no mascote → **Reação**: automática, fixar uma das seis (neutro, feliz, cansado, preocupado, confuso, morto) ou mostrar uma por 30 segundos. A fixa fica em `mascotEmote` e também está nas configurações. Com "morto" escolhido ele não passeia.
+- A tecla com o ponteiro em cima do mascote para abrir as reações não foi feita: a janela dele não recebe teclado, então seria mais um atalho global. O botão direito cobre o mesmo uso.
+
+### Ideias para depois (não implementadas)
+
+- Fazer carinho: passar o mouse várias vezes faz ele reagir (coração, pulinho).
+- Comemorar o reset: pulo e fala quando a sessão ou a semana zera.
+- Dormir à noite ou depois de muito tempo sem uso, e acordar quando o uso volta.
+- Seguir o mouse com os olhos quando o ponteiro está perto.
+- Clique duplo para atualizar agora.
+- Escalar a janela ou sentar em cima da janela ativa (exige ler a posição das outras janelas).
+- Tamanho ajustável (3x, 4x, 5x) e opacidade quando parado.
+- Barra de uso pequena embaixo dele, para ler a porcentagem sem passar o mouse.
+- Falas ocasionais com o estado ("faltam 40 min para o reset").
+- Lançar com o mouse: soltar em movimento faz ele voar com a velocidade do arrasto.
+
 ### Ainda não verificado
 
 - **Monitores de verdade com chão em alturas diferentes.** Pulo e queda foram testados com `--split-display=40`.
@@ -276,6 +296,9 @@ Todo movimento do corpo é animação CSS de `transform`, que roda no compositor
 6. Abrir um vídeo em tela cheia por alguns minutos: ele não deve andar por cima.
 7. Trocar para **Fixo** e soltar no meio da tela: fica onde foi solto.
 8. Baixar um limiar de alerta para logo acima do uso atual: o aviso vira fala.
+10. Apertar `Ctrl+Alt+M` com o mouse longe dele: ele corre até embaixo do ponteiro.
+11. Botão direito nele → **Reação**: fixar uma, mostrar outra por 30 segundos e voltar para automática.
+12. Observar por alguns minutos: ao piscar, os olhos fecham mas não somem.
 9. Desmarcar **Modo mascote**: as abas voltam onde estavam.
 
 ### Decisão

@@ -55,6 +55,7 @@ canvas { display: block; width: 64px; height: 60px; image-rendering: pixelated; 
 .a-confuso { animation: confused 2.2s ease-in-out infinite alternate; }
 .a-morto { animation: none; }
 .a-walk { animation: walk 0.48s linear infinite; }
+.a-run { animation: walk 0.28s linear infinite; }
 .a-air { animation: air 0.28s ease-in-out infinite alternate; }
 .a-drag { animation: dangle 0.55s ease-in-out infinite alternate; transform-origin: 50% 0; }
 .a-talk { animation: talk 0.24s ease-in-out infinite alternate; }

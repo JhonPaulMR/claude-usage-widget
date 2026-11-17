@@ -6,6 +6,9 @@ const INTERVALS = [30, 60, 120, 300]; // também é o intervalo dos pontos do gr
 const CHART_MODES = ['separate', 'combined', 'session', 'weekly'];
 const CHART_RANGES = { '1h': HOUR, '5h': 5 * HOUR, '24h': 24 * HOUR, '7d': 168 * HOUR };
 
+// Atalhos oferecidos para chamar o mascote até o mouse ('none' desliga).
+const CALL_KEYS = ['Control+Alt+M', 'Control+Shift+M', 'Control+Alt+Space', 'F8', 'none'];
+
 const bool = (v) => (typeof v === 'boolean' ? v : undefined);
 const oneOf = (list) => (v) => (list.includes(v) ? v : undefined);
 const percent = (v) => {
@@ -37,6 +40,8 @@ const RULES = {
   mascotMove: oneOf(['fixed', 'walk']),
   mascotFreq: oneOf(['rare', 'normal', 'often']),
   mascotNotify: bool,
+  mascotEmote: oneOf(['auto', 'neutro', 'feliz', 'cansado', 'preocupado', 'confuso', 'morto']),
+  mascotCallKey: oneOf(CALL_KEYS),
 };
 
 // Devolve { ok, value }. ok=false: chave desconhecida ou valor inválido.
@@ -72,4 +77,4 @@ function alertThresholds(get) {
   return [...new Set(list.filter((n) => Number.isFinite(n)))];
 }
 
-module.exports = { INTERVALS, CHART_MODES, CHART_RANGES, RULES, sanitize, migrate, pick, alertThresholds };
+module.exports = { CALL_KEYS, INTERVALS, CHART_MODES, CHART_RANGES, RULES, sanitize, migrate, pick, alertThresholds };

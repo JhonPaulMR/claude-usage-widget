@@ -159,8 +159,22 @@ function mirrorFrame(frame) {
   return frame.map((row) => row.split('').reverse().join(''));
 }
 
+// Quadro de piscar: cada olho fecha até sobrar só o pixel de baixo. Nunca apaga o olho inteiro
+// (apagar tudo fazia o rosto ficar em branco por um instante), e sobrancelhas de 1 px ficam como estão.
+function blinkFrame(frame) {
+  return frame.map((row, y) => row.split('').map((ch, x) => {
+    if (ch !== 'k') return ch;
+    const below = frame[y + 1] ? frame[y + 1][x] : '.';
+    if (below === 'k') return frame[y - 1] && frame[y - 1][x] !== '.' && frame[y - 1][x] !== 'k' ? frame[y - 1][x] : bodyColorOf(frame);
+    return ch;
+  }).join(''));
+}
+function bodyColorOf(frame) {
+  return frame.some((row) => row.includes('g')) ? 'g' : 'o';
+}
+
 // Scripts clássicos dividem o escopo global: um nome só para o que sai daqui.
-const mascotApi = { MASCOT_W, MASCOT_H, MASCOT_COLORS, MASCOT_POSES, mirrorFrame };
+const mascotApi = { MASCOT_W, MASCOT_H, MASCOT_COLORS, MASCOT_POSES, mirrorFrame, blinkFrame };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = mascotApi;
 else window.mascot = mascotApi;

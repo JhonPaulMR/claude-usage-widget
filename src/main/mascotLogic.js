@@ -4,6 +4,7 @@
 const MIN = 60000;
 const GRAVITY = 2600; // px/s²
 const WALK_SPEED = 70; // px/s
+const RUN_SPEED = 200; // px/s quando é chamado até o mouse
 const JUMP_SPEED_X = 210; // px/s ao pular para um chão mais alto
 const JUMP_CLEARANCE = 36; // quanto o pulo passa acima do chão de destino
 const HALF_W = 32; // meia largura do desenho (16 px x escala 4)
@@ -99,7 +100,8 @@ function stepAir(s, dt, ground) {
   return { cx, foot, vy, landed: false };
 }
 
-// Um passo andando no chão. s: { cx, foot, dir, left (px que faltam) }; cur: monitor atual.
+// Um passo andando no chão. s: { cx, dir, left (px que faltam), speed?, stopAtEdge? }; cur: monitor atual.
+// stopAtEdge: sem vizinho, para na borda em vez de dar meia-volta (indo até o mouse).
 // Devolve o que aconteceu:
 //   { type: 'walk', cx, left, dir }                 seguiu andando (dir muda ao dar meia-volta)
 //   { type: 'done', cx }                            terminou o trecho
@@ -107,7 +109,8 @@ function stepAir(s, dt, ground) {
 //   { type: 'fall', cx, to, vx }                    o chão do vizinho é mais baixo: cai
 //   { type: 'jump', cx, to, vx, vy }                o chão do vizinho é mais alto: pula
 function stepWalk(s, dt, cur, displays) {
-  const move = Math.min(WALK_SPEED * dt, s.left);
+  const speed = s.speed || WALK_SPEED;
+  const move = Math.min(speed * dt, s.left);
   let cx = s.cx + s.dir * move;
   const left = s.left - move;
   const minX = cur.bounds.x + HALF_W;
@@ -120,7 +123,7 @@ function stepWalk(s, dt, cur, displays) {
   if (!next) {
     if (atEdge) {
       cx = Math.max(minX, Math.min(maxX, cx));
-      return left > 0 ? { type: 'walk', cx, left, dir: -s.dir } : { type: 'done', cx };
+      return left > 0 && !s.stopAtEdge ? { type: 'walk', cx, left, dir: -s.dir } : { type: 'done', cx };
     }
     return left > 0 ? { type: 'walk', cx, left, dir: s.dir } : { type: 'done', cx };
   }
@@ -131,10 +134,25 @@ function stepWalk(s, dt, cur, displays) {
   }
   const crossed = s.dir > 0 ? cx >= cur.bounds.x + cur.bounds.width : cx < cur.bounds.x;
   if (crossed) {
-    if (rise < 0) return { type: 'fall', cx, to: next, vx: s.dir * WALK_SPEED };
+    if (rise < 0) return { type: 'fall', cx, to: next, vx: s.dir * speed };
     return { type: 'cross', cx, to: next, left };
   }
   return left > 0 ? { type: 'walk', cx, left, dir: s.dir } : { type: 'done', cx };
+}
+
+// Ir andando até um ponto da tela (o ponteiro do mouse). Devolve { dir, distance } ou null se já está lá.
+function planGoTo(cx, targetX, minDistance = 12) {
+  const delta = targetX - cx;
+  if (Math.abs(delta) < minDistance) return null;
+  return { dir: delta < 0 ? -1 : 1, distance: Math.abs(delta) };
+}
+
+// Reação mostrada: a escolhida por um tempo, senão a fixada, senão a que vem do uso.
+const EMOTES = ['neutro', 'feliz', 'cansado', 'preocupado', 'confuso', 'morto'];
+function shownEmotion(real, fixed, temp) {
+  if (EMOTES.includes(temp)) return temp;
+  if (EMOTES.includes(fixed)) return fixed;
+  return real;
 }
 
 // Saída do PowerShell "esq,topo,dir,base,classe" -> { rect, className } ou null.
@@ -167,7 +185,8 @@ function balloonPosition(sprite, content, win, area, gap = 10) {
 }
 
 module.exports = {
-  GRAVITY, WALK_SPEED, HALF_W,
+  GRAVITY, WALK_SPEED, RUN_SPEED, HALF_W, EMOTES,
+  planGoTo, shownEmotion,
   emotion, summary, nextWalkDelayMs, planWalk,
   groundOf, displayAt, neighbor, jumpVelocity, stepAir, stepWalk,
   parseForeground, isFullscreen, balloonPosition,

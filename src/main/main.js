@@ -1,4 +1,4 @@
-const { app, Tray, Menu, Notification, globalShortcut, powerMonitor, ipcMain, nativeImage } = require('electron');
+const { app, Tray, Menu, Notification, globalShortcut, powerMonitor, ipcMain, nativeImage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createStore } = require('./store');
@@ -16,6 +16,7 @@ const { createMascot } = require('./mascot');
 
 const FORCE_DEMO = process.argv.includes('--demo');
 const SHORTCUT = 'Control+Alt+U';
+const EMOTE_LABELS = { neutro: 'Neutro', feliz: 'Feliz', cansado: 'Cansado', preocupado: 'Preocupado', confuso: 'Confuso', morto: 'Morto' };
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -26,6 +27,8 @@ let store, widgets, mascot, tray, settingsWin, pollTimer, backoffSec = 0;
 let history, demoHistory; // pontos reais (arquivo) e pontos da demonstração (só memória)
 let payload = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
 let fetching = false;
+let callKey = null; // atalho registrado para chamar o mascote
+let callKeyFailed = false; // outro programa já usa o atalho
 let lastRenewal = null; // resultado da última tentativa de renovar o token (aparece nas configurações)
 
 const tokenRefresher = createTokenRefresher({ readExpiry, log: (r) => { lastRenewal = { ...r, at: Date.now() }; } });
@@ -62,6 +65,45 @@ function pushPrefs() {
   if (mascot) mascot.toBalloon('prefs', prefsPayload());
 }
 
+// Atalho global que chama o mascote até o mouse: só fica registrado no modo mascote.
+function syncCallKey() {
+  if (callKey) globalShortcut.unregister(callKey);
+  callKey = null;
+  callKeyFailed = false;
+  const key = store.get('mascotCallKey');
+  if (!mascot || !key || key === 'none') return;
+  if (globalShortcut.register(key, callMascot)) callKey = key;
+  else callKeyFailed = true;
+}
+
+function callMascot() {
+  if (!mascot) return;
+  const result = mascot.goTo(screen.getCursorScreenPoint());
+  if (result === 'fixed') mascot.say('Estou no modo fixo. Mude para passeio nas configurações.');
+}
+
+// Menu do botão direito no mascote: o menu normal mais as ações dele.
+function buildMascotMenu() {
+  const fixed = store.get('mascotEmote');
+  const temp = mascot.tempEmote();
+  const names = Object.keys(EMOTE_LABELS);
+  return Menu.buildFromTemplate([
+    { label: 'Vir até o mouse', accelerator: callKey || undefined, enabled: store.get('mascotMove') === 'walk', click: callMascot },
+    {
+      label: 'Reação',
+      submenu: [
+        { label: 'Automática (segue o uso)', type: 'radio', checked: fixed === 'auto' && !temp, click: () => { mascot.setTempEmote(null); applyPref('mascotEmote', 'auto'); } },
+        { type: 'separator' },
+        ...names.map((n) => ({ label: `Fixar: ${EMOTE_LABELS[n]}`, type: 'radio', checked: fixed === n && !temp, click: () => { mascot.setTempEmote(null); applyPref('mascotEmote', n); } })),
+        { type: 'separator' },
+        { label: 'Mostrar por 30 segundos', submenu: names.map((n) => ({ label: EMOTE_LABELS[n], click: () => mascot.setTempEmote(n) })) },
+      ],
+    },
+    { type: 'separator' },
+    ...buildMenuTemplate(),
+  ]);
+}
+
 // Liga ou desliga o modo mascote. Os modos são exclusivos: no mascote as abas clássicas somem.
 function applyMode() {
   const on = store.get('mode') === 'mascot';
@@ -70,13 +112,14 @@ function applyMode() {
     mascot = createMascot({
       store,
       getDisplays: () => widgets.enabledDisplays(),
-      onMenu: (win) => buildMenu().popup({ window: win }),
+      onMenu: (win) => buildMascotMenu().popup({ window: win }),
     });
     mascot.update(payload);
   } else if (!on && mascot) {
     mascot.destroy();
     mascot = null;
   }
+  syncCallKey();
 }
 
 function activeHistory() {
@@ -170,7 +213,11 @@ async function refresh() {
 
 // Menu da bandeja e do botão direito: só o essencial. O resto está na janela de configurações.
 function buildMenu() {
-  return Menu.buildFromTemplate([
+  return Menu.buildFromTemplate(buildMenuTemplate());
+}
+
+function buildMenuTemplate() {
+  return [
     { label: 'Atualizar agora', click: refresh },
     {
       label: store.get('visible') ? 'Ocultar widget' : 'Mostrar widget',
@@ -186,7 +233,7 @@ function buildMenu() {
     { label: 'Configurações…', click: openSettings },
     { type: 'separator' },
     { label: 'Sair', click: () => app.quit() },
-  ]);
+  ];
 }
 
 function renewalLabel() {
@@ -222,6 +269,7 @@ function settingsState() {
     packaged: app.isPackaged,
     version: app.getVersion(),
     shortcut: 'Ctrl+Alt+U',
+    callKeyFailed,
   };
 }
 
@@ -254,6 +302,8 @@ function applyPref(key, value) {
     if (mascot) mascot.refreshPrefs();
   } else if (key === 'mode') {
     applyMode();
+  } else if (key === 'mascotCallKey') {
+    syncCallKey();
   } else if (key.startsWith('mascot')) {
     if (mascot) mascot.refreshPrefs();
   } else if (key === 'autostart') {
@@ -291,7 +341,7 @@ app.whenReady().then(() => {
   widgets.sync();
   applyMode();
   // Ganchos de desenvolvimento, para testes automatizados da interface.
-  if (process.argv.includes('--dev-hooks')) global.__widget = { mascot: () => mascot, widgets, applyPref };
+  if (process.argv.includes('--dev-hooks')) global.__widget = { mascot: () => mascot, widgets, applyPref, callMascot, mascotMenu: () => buildMascotMenu() };
 
   const last = store.get('last');
   if (last && !isDemo()) payload = withForecast({ state: 'loading', data: last.data, fetchedAt: last.fetchedAt, message: '' });
