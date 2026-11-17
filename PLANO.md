@@ -266,16 +266,19 @@ Todo movimento do corpo é animação CSS de `transform`, que roda no compositor
 - **Reações escolhidas:** botão direito no mascote → **Reação**: automática, fixar uma das seis (neutro, feliz, cansado, preocupado, confuso, morto) ou mostrar uma por 30 segundos. A fixa fica em `mascotEmote` e também está nas configurações. Com "morto" escolhido ele não passeia.
 - A tecla com o ponteiro em cima do mascote para abrir as reações não foi feita: a janela dele não recebe teclado, então seria mais um atalho global. O botão direito cobre o mesmo uso.
 
+### Segunda rodada de melhorias (pedidas pelo usuário)
+
+- **Barra de vida:** duas barras em cima da cabeça, no estilo de barra de HP. A grossa é o que resta da sessão (verde acima de 40%, âmbar de 15 a 40%, vermelha abaixo; contorno vermelho quando zera) e a fina, azul, é o que resta da semana. Fica em cima e não embaixo porque os pés dele ficam encostados na barra de tarefas. Desligável em Configurações (`mascotBar`).
+- **Comemorar o reset:** quando a porcentagem cai e o horário de reset pula mais de 10 min para a frente (ou some), ele fala "Sessão renovada!" ou "Semana renovada!" e dá dois pulinhos no lugar com a pose feliz. Não comemora se o uso anterior era menor que 5%. Funciona também no modo fixo.
+- **Olhos seguindo o mouse:** com o ponteiro a menos de 450 px, os olhos se deslocam 1 pixel na direção dele (8 direções). O processo principal confere o ponteiro a cada 120 ms, só com o mascote visível e parado, e só avisa a interface quando a direção muda. Não vale andando, no ar nem morto.
+
 ### Ideias para depois (não implementadas)
 
 - Fazer carinho: passar o mouse várias vezes faz ele reagir (coração, pulinho).
-- Comemorar o reset: pulo e fala quando a sessão ou a semana zera.
 - Dormir à noite ou depois de muito tempo sem uso, e acordar quando o uso volta.
-- Seguir o mouse com os olhos quando o ponteiro está perto.
 - Clique duplo para atualizar agora.
 - Escalar a janela ou sentar em cima da janela ativa (exige ler a posição das outras janelas).
 - Tamanho ajustável (3x, 4x, 5x) e opacidade quando parado.
-- Barra de uso pequena embaixo dele, para ler a porcentagem sem passar o mouse.
 - Falas ocasionais com o estado ("faltam 40 min para o reset").
 - Lançar com o mouse: soltar em movimento faz ele voar com a velocidade do arrasto.
 
@@ -300,6 +303,9 @@ Todo movimento do corpo é animação CSS de `transform`, que roda no compositor
 10. Apertar `Ctrl+Alt+M` com o mouse longe dele: ele corre até embaixo do ponteiro.
 11. Botão direito nele → **Reação**: fixar uma, mostrar outra por 30 segundos e voltar para automática.
 12. Observar por alguns minutos: ao piscar, os olhos fecham mas não somem.
+13. Conferir a barra de vida em cima dele: ela encolhe conforme o uso sobe.
+14. Mover o mouse em volta dele, de perto: os olhos acompanham.
+15. No reset da sessão, ele deve falar "Sessão renovada!" e dar dois pulinhos.
 
 ### Decisão
 

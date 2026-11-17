@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { MASCOT_W, MASCOT_H, MASCOT_COLORS, MASCOT_POSES, mirrorFrame, blinkFrame } = require('../src/shared/mascotSprites');
+const { MASCOT_W, MASCOT_H, MASCOT_COLORS, MASCOT_POSES, mirrorFrame, blinkFrame, gazeFrame } = require('../src/shared/mascotSprites');
 
 const EXPECTED = ['neutro', 'feliz', 'cansado', 'preocupado', 'confuso', 'morto', 'andando', 'caindo', 'falando'];
 
@@ -61,6 +61,26 @@ test('blinkFrame: o olho fecha mas nunca some, em nenhuma pose', () => {
   const neutro = blinkFrame(MASCOT_POSES.neutro[0]);
   assert.equal(neutro[7], '..oooooooooooo..');
   assert.equal(neutro[8], '..ookooooookoo..');
+});
+
+test('gazeFrame: os olhos se deslocam 1 px sem perder nenhum pixel, em qualquer pose e direção', () => {
+  const dark = (frame) => (frame.join('').match(/k/g) || []).length;
+  for (const [name, frames] of Object.entries(MASCOT_POSES)) {
+    for (const frame of frames) {
+      for (const gx of [-1, 0, 1]) for (const gy of [-1, 0, 1]) {
+        const moved = gazeFrame(frame, gx, gy);
+        assert.equal(dark(moved), dark(frame), `${name} ${gx},${gy}`);
+        assert.equal(dark(blinkFrame(moved)) >= 2, true, `${name} ${gx},${gy} piscando`);
+        moved.forEach((row) => assert.equal(row.length, MASCOT_W));
+      }
+    }
+  }
+  const right = gazeFrame(MASCOT_POSES.neutro[0], 1, 0);
+  assert.equal(right[7], '..oookooooooko..');
+  const up = gazeFrame(MASCOT_POSES.neutro[0], 0, -1);
+  assert.equal(up[6], '..ookooooookoo..');
+  assert.equal(up[8], '..oooooooooooo..');
+  assert.equal(gazeFrame(MASCOT_POSES.neutro[0], 0, 0), MASCOT_POSES.neutro[0]);
 });
 
 test('mirrorFrame espelha e é o próprio inverso', () => {

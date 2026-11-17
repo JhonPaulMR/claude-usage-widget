@@ -17,6 +17,7 @@ const DEFAULTS = {
   mascotMove: 'walk', // fixed (fica onde for solto) | walk (anda no topo da barra de tarefas)
   mascotFreq: 'normal', // rare | normal | often
   mascotNotify: true, // no modo mascote, o alerta também vira notificação do Windows
+  mascotBar: true, // barra de vida em cima do mascote
   mascotEmote: 'auto', // auto (segue o uso) ou uma reação fixada
   mascotCallKey: 'Control+Alt+M', // atalho global: o mascote vai andando até o mouse
   mascotPos: null, // { cx, foot }: ponto dos pés na tela

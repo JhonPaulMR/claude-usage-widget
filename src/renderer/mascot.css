@@ -13,6 +13,7 @@ body[data-theme='light'] {
 }
 
 * { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
 html, body { background: transparent; overflow: hidden; height: 100%; user-select: none; }
 body { font: 12px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; }
 
@@ -59,6 +60,7 @@ canvas { display: block; width: 64px; height: 60px; image-rendering: pixelated; 
 .a-air { animation: air 0.28s ease-in-out infinite alternate; }
 .a-drag { animation: dangle 0.55s ease-in-out infinite alternate; transform-origin: 50% 0; }
 .a-talk { animation: talk 0.24s ease-in-out infinite alternate; }
+.a-hop { animation: air 0.2s ease-in-out infinite alternate; }
 
 /* ---- efeitos de uma vez (na .squash) ---- */
 @keyframes land {
@@ -75,11 +77,33 @@ canvas { display: block; width: 64px; height: 60px; image-rendering: pixelated; 
 .fx-land { animation: land 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
 .fx-pop { animation: pop 0.28s ease-out; }
 
+/* ---- barra de vida: o que resta da sessão (grossa) e da semana (fina) ---- */
+.hp {
+  position: absolute;
+  left: 50%;
+  bottom: 66px;
+  width: 56px;
+  margin-left: -28px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+}
+.hp-bar { background: #1f1e1d; border: 2px solid #1f1e1d; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28); }
+.hp-bar > i { display: block; height: 100%; width: 0; background: #6b6b72; transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.4s; }
+.hp-session { height: 9px; }
+.hp-weekly { height: 6px; width: 40px; align-self: center; }
+.hp-session > i.high { background: #34d399; }
+.hp-session > i.mid { background: #fbbf24; }
+.hp-session > i.low { background: #f87171; }
+.hp-weekly > i { background: #60a5fa; }
+.hp.empty .hp-session { box-shadow: 0 0 0 1px #f87171; }
+
 /* ---- balão de fala e de resumo ---- */
 .bubble {
   position: absolute;
   left: 50%;
-  bottom: 72px;
+  bottom: 88px;
   max-width: 250px;
   width: max-content;
   padding: 7px 11px;

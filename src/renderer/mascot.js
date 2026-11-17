@@ -5,6 +5,7 @@ const POSES = window.mascot.MASCOT_POSES;
 const COLORS = window.mascot.MASCOT_COLORS;
 const flip = window.mascot.mirrorFrame;
 const closeEyes = window.mascot.blinkFrame;
+const lookAt = window.mascot.gazeFrame;
 
 const actor = document.getElementById('actor');
 const squash = document.getElementById('squash');
@@ -12,6 +13,7 @@ const bubble = document.getElementById('bubble');
 const ctx = document.getElementById('sprite').getContext('2d');
 
 let state = { pose: 'idle', fast: false, dir: 1, emotion: 'feliz', speech: null, summary: '', room: null, theme: 'dark' };
+let gaze = { x: 0, y: 0 }; // para onde os olhos apontam (o mouse, quando está perto)
 let frameIndex = 0;
 let frameTimer = null;
 let blinking = false;
@@ -20,11 +22,16 @@ let hoverTimer = null;
 
 const FRAME_MS = { andando: 120, 'andando-rapido': 70, falando: 240 };
 const BLINKERS = ['neutro', 'andando', 'falando', 'preocupado', 'confuso'];
+const GAZERS = ['neutro', 'feliz', 'cansado', 'preocupado', 'confuso', 'falando'];
+const hp = document.getElementById('hp');
+const hpSession = document.getElementById('hpSession');
+const hpWeekly = document.getElementById('hpWeekly');
 
 // Qual desenho e qual animação usar agora.
 function look() {
   if (state.emotion === 'morto') return { sprite: 'morto', anim: state.pose === 'drag' ? 'a-drag' : 'a-morto' };
   if (state.pose === 'drag') return { sprite: 'caindo', anim: 'a-drag' };
+  if (state.pose === 'hop') return { sprite: 'feliz', anim: 'a-hop' }; // comemorando o reset
   if (state.pose === 'air') return { sprite: 'caindo', anim: 'a-air' };
   if (state.pose === 'walk') return { sprite: 'andando', anim: state.fast ? 'a-run' : 'a-walk', pace: state.fast ? 'andando-rapido' : 'andando' };
   if (state.pose === 'talk') return { sprite: 'falando', anim: 'a-talk' };
@@ -37,6 +44,7 @@ function draw() {
   let frame = frames[frameIndex % frames.length];
   if (blinking) frame = closeEyes(frame); // piscar: o olho fecha, sem sumir
   if (state.dir < 0) frame = flip(frame);
+  if ((state.pose === 'idle' || state.pose === 'talk') && GAZERS.includes(sprite)) frame = lookAt(frame, gaze.x, gaze.y);
   ctx.clearRect(0, 0, 16, 15);
   frame.forEach((row, y) => {
     for (let x = 0; x < row.length; x++) {
@@ -70,10 +78,24 @@ function apply(next) {
     frameTimer = null;
     if (FRAME_MS[pace(now)]) frameTimer = setInterval(() => { frameIndex++; draw(); }, FRAME_MS[pace(now)]);
   }
-  if (prev.pose === 'air' && state.pose !== 'air' && state.pose !== 'drag') playOnce('fx-land');
+  const inAir = (p) => p === 'air' || p === 'hop';
+  if (inAir(prev.pose) && !inAir(state.pose) && state.pose !== 'drag') playOnce('fx-land');
   else if (prev.emotion !== state.emotion && state.pose === 'idle') playOnce('fx-pop');
   draw();
+  showBars();
   showBubble();
+}
+
+// Barra de vida: largura = o que resta. A cor da sessão segue as faixas do widget (uso < 60, até 85, acima).
+function showBars() {
+  const b = state.bars;
+  hp.hidden = !b || state.pose === 'drag';
+  if (!b) return;
+  const left = b.session;
+  hpSession.style.width = `${left == null ? 0 : left}%`;
+  hpSession.className = left == null ? '' : left > 40 ? 'high' : left >= 15 ? 'mid' : 'low';
+  hpWeekly.style.width = `${b.weekly == null ? 0 : b.weekly}%`;
+  hp.classList.toggle('empty', left === 0);
 }
 
 // Piscar de vez em quando, só nas poses de olho aberto.
@@ -169,5 +191,6 @@ window.addEventListener('contextmenu', (e) => {
 });
 
 mascotBridge.onState(apply);
+mascotBridge.onGaze((g) => { gaze = g; draw(); });
 apply({});
 mascotBridge.ready();

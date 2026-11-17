@@ -40,6 +40,7 @@ const RULES = {
   mascotMove: oneOf(['fixed', 'walk']),
   mascotFreq: oneOf(['rare', 'normal', 'often']),
   mascotNotify: bool,
+  mascotBar: bool,
   mascotEmote: oneOf(['auto', 'neutro', 'feliz', 'cansado', 'preocupado', 'confuso', 'morto']),
   mascotCallKey: oneOf(CALL_KEYS),
 };

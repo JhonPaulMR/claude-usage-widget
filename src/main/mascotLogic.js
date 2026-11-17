@@ -155,6 +155,37 @@ function shownEmotion(real, fixed, temp) {
   return real;
 }
 
+// A janela de limite virou? (compara o dado anterior com o novo.) Devolve 'session', 'weekly' ou null.
+// Vale quando a porcentagem cai e o horário de reset pulou para a frente (ou deixou de existir).
+const RESET_GAP_MS = 10 * MIN;
+function detectReset(prev, next) {
+  for (const name of ['session', 'weekly']) {
+    const a = prev && prev[name];
+    const b = next && next[name];
+    if (!a || !b || typeof a.pct !== 'number' || typeof b.pct !== 'number') continue;
+    if (a.pct < 5 || b.pct >= a.pct) continue;
+    const jumped = !a.resetsAt || !b.resetsAt || b.resetsAt - a.resetsAt > RESET_GAP_MS;
+    if (jumped) return name;
+  }
+  return null;
+}
+
+// Para onde os olhos apontam: { x, y } com -1, 0 ou 1. Longe demais, olha para a frente.
+// eye: centro do rosto na tela; cursor: ponteiro.
+const GAZE_RANGE = 450;
+function gaze(cursor, eye) {
+  const dx = cursor.x - eye.x;
+  const dy = cursor.y - eye.y;
+  if (Math.hypot(dx, dy) > GAZE_RANGE) return { x: 0, y: 0 };
+  return { x: dx < -45 ? -1 : dx > 45 ? 1 : 0, y: dy < -60 ? -1 : dy > 60 ? 1 : 0 };
+}
+
+// Barra de vida: o que resta de cada limite (100 - uso). null quando não há dado.
+function bars(data) {
+  const left = (item) => (item && typeof item.pct === 'number' ? Math.max(0, Math.min(100, 100 - item.pct)) : null);
+  return { session: left(data && data.session), weekly: left(data && data.weekly) };
+}
+
 // Saída do PowerShell "esq,topo,dir,base,classe" -> { rect, className } ou null.
 function parseForeground(text) {
   const m = /^\s*(-?\d+),(-?\d+),(-?\d+),(-?\d+),(.*?)\s*$/.exec(String(text || ''));
@@ -186,7 +217,7 @@ function balloonPosition(sprite, content, win, area, gap = 10) {
 
 module.exports = {
   GRAVITY, WALK_SPEED, RUN_SPEED, HALF_W, EMOTES,
-  planGoTo, shownEmotion,
+  planGoTo, shownEmotion, detectReset, gaze, bars,
   emotion, summary, nextWalkDelayMs, planWalk,
   groundOf, displayAt, neighbor, jumpVelocity, stepAir, stepWalk,
   parseForeground, isFullscreen, balloonPosition,

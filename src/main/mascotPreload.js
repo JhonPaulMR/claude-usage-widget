@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('mascotBridge', {
   onState: (cb) => ipcRenderer.on('mascot:state', (_e, state) => cb(state)),
+  onGaze: (cb) => ipcRenderer.on('mascot:gaze', (_e, g) => cb(g)),
   ready: () => ipcRenderer.send('mascot:ready'),
   setIgnore: (ignore) => ipcRenderer.send('mascot:ignore', ignore),
   dragStart: () => ipcRenderer.send('mascot:drag-start'),

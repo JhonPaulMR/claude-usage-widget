@@ -113,6 +113,33 @@ test('shownEmotion: temporária > fixada > a que vem do uso', () => {
   assert.equal(m.shownEmotion('cansado', 'qualquer', 'outra'), 'cansado');
 });
 
+test('detectReset: porcentagem caiu e o reset pulou para a frente', () => {
+  const at = (pct, resetsAt) => ({ pct, resetsAt });
+  const H5 = 5 * 60 * MIN;
+  assert.equal(m.detectReset({ session: at(80, NOW) }, { session: at(2, NOW + H5) }), 'session');
+  assert.equal(m.detectReset({ session: at(80, NOW) }, { session: at(0, null) }), 'session'); // janela acabou, sem sessão nova
+  assert.equal(m.detectReset({ session: at(10, NOW), weekly: at(90, NOW) }, { session: at(11, NOW), weekly: at(1, NOW + 7 * 24 * 60 * MIN) }), 'weekly');
+  assert.equal(m.detectReset({ session: at(80, NOW) }, { session: at(81, NOW + 1000) }), null); // uso normal
+  assert.equal(m.detectReset({ session: at(80, NOW) }, { session: at(40, NOW + 5000) }), null); // caiu sem virar a janela (demonstração)
+  assert.equal(m.detectReset({ session: at(2, NOW) }, { session: at(0, NOW + H5) }), null); // quase nada usado: sem festa
+  assert.equal(m.detectReset(null, { session: at(0, NOW) }), null);
+});
+
+test('gaze: olha para o ponteiro quando está perto', () => {
+  const eye = { x: 1000, y: 900 };
+  assert.deepEqual(m.gaze({ x: 1200, y: 900 }, eye), { x: 1, y: 0 });
+  assert.deepEqual(m.gaze({ x: 800, y: 700 }, eye), { x: -1, y: -1 });
+  assert.deepEqual(m.gaze({ x: 1010, y: 1000 }, eye), { x: 0, y: 1 });
+  assert.deepEqual(m.gaze({ x: 1010, y: 910 }, eye), { x: 0, y: 0 });
+  assert.deepEqual(m.gaze({ x: 100, y: 100 }, eye), { x: 0, y: 0 }); // longe
+});
+
+test('bars: barra de vida mostra o que resta', () => {
+  assert.deepEqual(m.bars({ session: { pct: 62 }, weekly: { pct: 37 } }), { session: 38, weekly: 63 });
+  assert.deepEqual(m.bars({ session: { pct: 130 }, weekly: null }), { session: 0, weekly: null });
+  assert.deepEqual(m.bars(null), { session: null, weekly: null });
+});
+
 test('stepAir: cai com gravidade, pousa só descendo, e o pulo alcança o chão mais alto', () => {
   let s = { cx: 100, foot: 500, vx: 0, vy: 0 };
   let t = 0;

@@ -6,7 +6,7 @@ const path = require('path');
 const logic = require('./mascotLogic');
 
 const WIN_W = 540; // sobra dos lados e em cima para o balão de fala, que desliza perto das bordas
-const WIN_H = 170;
+const WIN_H = 190;
 const SPRITE_W = 64;
 const SPRITE_H = 60;
 const PANEL_W = 236;
@@ -15,6 +15,9 @@ const TICK_MS = 1000 / 60;
 const SPEECH_MS = 7000;
 const BALLOON_LEAVE_MS = 3000;
 const BALLOON_IDLE_MS = 12000;
+const GAZE_MS = 120; // de quanto em quanto tempo ele confere onde está o mouse
+const CHEER_HOPS = 2;
+const CHEER_TEXT = { session: 'Sessão renovada!', weekly: 'Semana renovada!' };
 
 // Classe e retângulo da janela em primeiro plano (para não passear por cima de tela cheia).
 const FOREGROUND_PS = `
@@ -69,6 +72,13 @@ function createMascot(opts) {
   let speed = logic.WALK_SPEED;
   let stopAtEdge = false; // indo até o mouse: para na borda em vez de dar meia-volta
 
+  let hops = 0; // pulos de comemoração que faltam
+  let hopGround = null; // onde ele pousa ao comemorar (o próprio lugar, mesmo no modo fixo)
+  let prevData = null; // dado anterior, para perceber que a janela virou
+  let barValues = { session: null, weekly: null };
+  let gazeTimer = null;
+  let lastGaze = { x: 0, y: 0 };
+
   // o que ele mostra
   let realEmotion = 'feliz'; // a que vem do uso
   let tempEmote = null; // reação escolhida por um tempo
@@ -118,14 +128,14 @@ function createMascot(opts) {
 
   function pose() {
     if (mode === 'drag') return 'drag';
-    if (mode === 'air') return 'air';
+    if (mode === 'air') return hopGround != null ? 'hop' : 'air';
     if (mode === 'walk') return 'walk';
     return speech ? 'talk' : 'idle';
   }
 
   function push() {
     if (!win || win.isDestroyed()) return;
-    win.webContents.send('mascot:state', { pose: pose(), fast: mode === 'walk' && speed > logic.WALK_SPEED, dir, emotion, speech, summary, room: bubbleRoom(), theme: store.get('theme') });
+    win.webContents.send('mascot:state', { pose: pose(), fast: mode === 'walk' && speed > logic.WALK_SPEED, dir, emotion, speech, summary, bars: store.get('mascotBar') ? barValues : null, room: bubbleRoom(), theme: store.get('theme') });
   }
 
   // ---------- relógio de movimento: só roda enquanto ele anda ou está no ar ----------
@@ -177,11 +187,17 @@ function createMascot(opts) {
         const b = vel.to.bounds;
         if (pos.cx >= b.x && pos.cx < b.x + b.width) cur = vel.to;
       }
-      const r = logic.stepAir({ cx: pos.cx, foot: pos.foot, vx: vel.vx, vy: vel.vy }, dt, logic.groundOf(cur));
+      const ground = hopGround != null ? hopGround : logic.groundOf(cur);
+      const r = logic.stepAir({ cx: pos.cx, foot: pos.foot, vx: vel.vx, vy: vel.vy }, dt, ground);
       pos.cx = r.cx;
       pos.foot = r.foot;
       vel.vy = r.vy;
-      if (r.landed) {
+      if (r.landed && hopGround != null) {
+        // comemorando: pula de novo ou termina
+        hops--;
+        if (hops > 0) vel = { vx: 0, vy: logic.jumpVelocity(0) };
+        else { hopGround = null; place(); return settle(); }
+      } else if (r.landed) {
         // pousou: segue o trecho que estava fazendo, ou para
         if (resumeLeft > 0 && walking() && emotion !== 'morto') {
           left = resumeLeft;
@@ -345,6 +361,32 @@ function createMascot(opts) {
     else { place(); savePos(); push(); }
   }
 
+  // A janela virou: fala e dá dois pulinhos no lugar.
+  function celebrate(kind) {
+    if (mode === 'drag' || mode === 'air' || !win || win.isDestroyed()) return;
+    halt();
+    api.say(CHEER_TEXT[kind]);
+    hops = CHEER_HOPS;
+    hopGround = pos.foot;
+    resumeLeft = 0;
+    vel = { vx: 0, vy: logic.jumpVelocity(0) };
+    mode = 'air';
+    push();
+    startTicker();
+  }
+
+  // Olhos seguindo o mouse: só confere o ponteiro enquanto ele está visível e parado.
+  function watchCursor() {
+    clearInterval(gazeTimer);
+    gazeTimer = setInterval(() => {
+      if (!win || win.isDestroyed() || !win.isVisible()) return;
+      const g = mode === 'idle' ? logic.gaze(screen.getCursorScreenPoint(), { x: pos.cx, y: pos.foot - 36 }) : { x: 0, y: 0 };
+      if (g.x === lastGaze.x && g.y === lastGaze.y) return;
+      lastGaze = g;
+      win.webContents.send('mascot:gaze', g);
+    }, GAZE_MS);
+  }
+
   function applyEmotion() {
     emotion = logic.shownEmotion(realEmotion, store.get('mascotEmote'), tempEmote);
     if (emotion === 'morto') halt();
@@ -352,19 +394,25 @@ function createMascot(opts) {
   }
 
   create();
+  watchCursor();
 
   const isMascot = (wc) => !!(win && !win.isDestroyed() && wc === win.webContents);
   const isBalloon = (wc) => !!(balloon && !balloon.isDestroyed() && wc === balloon.webContents);
 
-  return {
+  const api = {
     isMascot,
     isBalloon,
     onDisplaysChanged,
     // Dados novos: recalcula emoção e resumo. Morto não anda.
     update(payload) {
+      const data = payload && payload.data;
+      const reset = payload && payload.state === 'ok' ? logic.detectReset(prevData, data) : null;
+      if (payload && payload.state === 'ok') prevData = data;
       realEmotion = logic.emotion(payload);
       summary = logic.summary(payload);
+      barValues = logic.bars(data);
       applyEmotion();
+      if (reset) celebrate(reset);
     },
     // Reação escolhida no menu por alguns segundos (null cancela). A fixa fica na preferência mascotEmote.
     setTempEmote(name, ms = 30000) {
@@ -446,6 +494,8 @@ function createMascot(opts) {
       if (win && !win.isDestroyed()) opts.onMenu(win);
     },
     dragStart() {
+      hops = 0;
+      hopGround = null;
       closeBalloon();
       clearTimeout(walkTimer);
       stopTicker();
@@ -476,6 +526,7 @@ function createMascot(opts) {
       clearTimeout(speechTimer);
       clearTimeout(balloonTimer);
       clearTimeout(tempTimer);
+      clearInterval(gazeTimer);
       if (pos) savePos();
       if (win && !win.isDestroyed()) win.destroy();
       if (balloon && !balloon.isDestroyed()) balloon.destroy();
@@ -491,8 +542,9 @@ function createMascot(opts) {
       push();
       startTicker();
     },
-    debugState: () => ({ mode, dir, pos: pos && { ...pos }, cur: cur && cur.id, emotion, speech, balloon: balloonOpen() }),
+    debugState: () => ({ mode, dir, pos: pos && { ...pos }, cur: cur && cur.id, emotion, speech, balloon: balloonOpen(), hops, bars: barValues }),
   };
+  return api;
 }
 
 module.exports = { createMascot };

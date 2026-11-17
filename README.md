@@ -62,6 +62,9 @@ Troque em **Configurações → Modo de exibição** ou no menu. As abas da bord
 
 - **Passeio:** anda um trecho curto de tempos em tempos sobre a barra de tarefas, atravessa para os monitores marcados e cai com gravidade se for solto no ar. Fica parado com aplicativo em tela cheia.
 - **Fixo:** fica onde for solto.
+- **Barra de vida:** em cima dele, mostra o que resta da sessão (barra grossa) e da semana (barra fina, azul).
+- **Olhos:** acompanham o mouse quando o ponteiro está perto.
+- **Reset:** quando a sessão ou a semana renova, ele comemora com uma fala e dois pulinhos.
 - **Passar o mouse:** mostra um resumo ("Sessão 62%, reset em 1h40").
 - **Clicar:** abre o painel completo em um balão ao lado dele.
 - **Arrastar:** leva o mascote para outro lugar.

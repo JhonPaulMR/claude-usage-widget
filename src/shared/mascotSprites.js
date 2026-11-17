@@ -173,8 +173,31 @@ function bodyColorOf(frame) {
   return frame.some((row) => row.includes('g')) ? 'g' : 'o';
 }
 
+// Olhar para um lado: desloca os olhos (e sobrancelhas) 1 px em gx e/ou gy (-1, 0 ou 1).
+// Só desloca se todos os pixels escuros continuarem dentro do corpo; senão tenta um eixo só.
+function gazeFrame(frame, gx, gy) {
+  if (!gx && !gy) return frame;
+  const body = bodyColorOf(frame);
+  const cells = [];
+  frame.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === 'k') cells.push([x, y]); });
+  const fits = (dx, dy) => cells.every(([x, y]) => {
+    const target = frame[y + dy] && frame[y + dy][x + dx];
+    return target === body || target === 'k';
+  });
+  let dx = gx, dy = gy;
+  if (!fits(dx, dy)) {
+    if (fits(dx, 0)) dy = 0;
+    else if (fits(0, dy)) dx = 0;
+    else return frame;
+  }
+  const grid = frame.map((row) => row.split(''));
+  for (const [x, y] of cells) grid[y][x] = body;
+  for (const [x, y] of cells) grid[y + dy][x + dx] = 'k';
+  return grid.map((row) => row.join(''));
+}
+
 // Scripts clássicos dividem o escopo global: um nome só para o que sai daqui.
-const mascotApi = { MASCOT_W, MASCOT_H, MASCOT_COLORS, MASCOT_POSES, mirrorFrame, blinkFrame };
+const mascotApi = { MASCOT_W, MASCOT_H, MASCOT_COLORS, MASCOT_POSES, mirrorFrame, blinkFrame, gazeFrame };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = mascotApi;
 else window.mascot = mascotApi;
