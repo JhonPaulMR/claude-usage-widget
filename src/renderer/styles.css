@@ -149,6 +149,8 @@ body { font: 13px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-ser
 .sub b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
 .pace { margin-top: 2px; }
 .pace.warn { color: var(--amber); }
+.pace.warn b { color: inherit; font-weight: 700; }
+.pace.old { opacity: 0.55; }
 
 .models { display: flex; flex-direction: column; gap: 5px; padding: 2px 4px; }
 .models:empty { display: none; }

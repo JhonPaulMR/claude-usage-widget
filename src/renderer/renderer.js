@@ -8,7 +8,7 @@ const els = {
   models: $('models'),
 };
 
-let usage = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
+let usage = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null, forecast: null, intervalSec: 60 };
 let open = false;
 let pinned = false;
 let leaveTimer = null;
@@ -42,12 +42,12 @@ function setRing(name, item, stale) {
 
 // ---------- painel ----------
 const TITLES = { session: GAUGES.session.title, weekly: GAUGES.weekly.title };
-const WINDOWS = { session: fmt.SESSION_WINDOW_MS, weekly: fmt.WEEK_WINDOW_MS };
 
 function cardHtml(name, item, now) {
   const pct = item ? fmt.clampPct(item.pct) : null;
   const band = fmt.colorBand(pct);
-  const pace = item ? fmt.paceProjection(pct, item.resetsAt, WINDOWS[name], now) : { level: 'none', text: '' };
+  const fc = fmt.forecastText(item && usage.forecast && usage.forecast[name], name, now);
+  const old = fc.level !== 'none' && fmt.forecastIsStale(usage.fetchedAt, usage.intervalSec, now);
   const countdown = item && item.resetsAt ? fmt.formatCountdown(item.resetsAt - now) : '—';
   const at = item && item.resetsAt ? fmt.formatResetAt(item.resetsAt, now) : '—';
   return `
@@ -55,7 +55,7 @@ function cardHtml(name, item, now) {
       <span class="pct t-${band}">${pct == null ? '—' : Math.round(pct) + '<small>%</small>'}</span></div>
     <div class="bar"><i class="b-${band}" data-w="${pct == null ? 0 : pct}"></i></div>
     <div class="sub">reseta em <b data-cd="${item && item.resetsAt || ''}">${countdown}</b> · ${at}</div>
-    <div class="sub pace ${pace.level}">${pace.text}</div>`;
+    <div class="sub pace ${fc.level}${old ? ' old' : ''}">${fc.pre}${fc.strong ? `<b>${fc.strong}</b>` : ''}${fc.post}${old ? ' · desatualizada' : ''}</div>`;
 }
 
 function render() {

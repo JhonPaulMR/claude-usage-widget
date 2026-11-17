@@ -32,15 +32,27 @@ test('formatResetAt: hoje, amanhã e dia da semana', () => {
   assert.equal(f.formatResetAt(new Date(2026, 9, 16, 9, 0).getTime(), now), 'sex 09:00');
 });
 
-test('paceProjection: avisa quando vai estourar antes do reset', () => {
+test('forecastText: faixa, destaque no pessimista e casos fixos', () => {
+  const now = new Date(2026, 9, 13, 10, 0).getTime(); // terça
+  const at = (h, m, d = 13) => new Date(2026, 9, d, h, m).getTime();
+  assert.deepEqual(f.forecastText({ status: 'range', earliest: at(14, 20), latest: at(15, 10) }, 'session', now),
+    { level: 'warn', pre: 'acaba entre ', strong: '14:20', post: ' e 15:10' });
+  assert.deepEqual(f.forecastText({ status: 'range', earliest: at(14, 20), latest: null }, 'session', now),
+    { level: 'warn', pre: 'pode acabar a partir de ', strong: '14:20', post: '' });
+  assert.equal(f.forecastText({ status: 'range', earliest: at(14, 20), latest: at(14, 22) }, 'session', now).pre, 'acaba por volta de ');
+  const week = f.forecastText({ status: 'range', earliest: at(9, 0, 14), latest: at(18, 30, 16) }, 'weekly', now);
+  assert.equal(week.strong, 'amanhã 09:00');
+  assert.equal(week.post, ' e sex 18:30');
+  assert.equal(f.forecastText({ status: 'safe' }, 'session', now).pre, 'não deve acabar nesta sessão');
+  assert.equal(f.forecastText({ status: 'safe' }, 'weekly', now).pre, 'não deve acabar nesta semana');
+  assert.equal(f.forecastText({ status: 'limit' }, 'session', now).pre, 'limite atingido');
+  assert.equal(f.forecastText({ status: 'low' }, 'session', now).level, 'ok');
+  assert.equal(f.forecastText(null, 'session', now).level, 'none');
+});
+
+test('forecastIsStale: mais de 2 intervalos sem dado novo', () => {
   const now = 1_000_000_000_000;
-  const win = f.SESSION_WINDOW_MS;
-  // 1h decorrida de 5h, 50% usado => 100% em +1h, bem antes do reset (+4h)
-  const warn = f.paceProjection(50, now + 4 * 3600000, win, now);
-  assert.equal(warn.level, 'warn');
-  assert.match(warn.text, /~1h/);
-  // 4h decorridas, 10% usado => confortável
-  assert.equal(f.paceProjection(10, now + 3600000, win, now).level, 'ok');
-  assert.equal(f.paceProjection(100, now + 3600000, win, now).text, 'limite atingido');
-  assert.equal(f.paceProjection(null, null, win, now).level, 'none');
+  assert.equal(f.forecastIsStale(now - 119000, 60, now), false);
+  assert.equal(f.forecastIsStale(now - 121000, 60, now), true);
+  assert.equal(f.forecastIsStale(null, 60, now), false);
 });

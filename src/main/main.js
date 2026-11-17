@@ -7,6 +7,8 @@ const { fetchUsage, fetchDemo, readExpiry, CRED_PATH } = require('./usageProvide
 const { nextBackoffSec, nextDelaySec } = require('./schedule');
 const { createTokenRefresher } = require('./tokenRefresher');
 const { createAlerter } = require('./alerts');
+const { createHistory } = require('./history');
+const { forecastAll } = require('./forecast');
 
 const FORCE_DEMO = process.argv.includes('--demo');
 const INTERVALS = [30, 60, 120, 180, 300];
@@ -18,6 +20,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let store, widget, tray, pollTimer, backoffSec = 0;
+let history, demoHistory; // pontos reais (arquivo) e pontos da demonstração (só memória)
 let payload = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
 let fetching = false;
 let lastRenewal = null; // resultado da última tentativa de renovar o token (aparece no menu)
@@ -34,6 +37,17 @@ function isDemo() {
 
 function prefsPayload() {
   return { theme: store.get('theme') };
+}
+
+function activeHistory() {
+  return isDemo() ? demoHistory : history;
+}
+
+// Previsão calculada sobre o último dado conhecido; a interface marca como desatualizada se ele envelhecer.
+function withForecast(p) {
+  p.forecast = forecastAll(p.data, activeHistory().all());
+  p.intervalSec = store.get('intervalSec');
+  return p;
 }
 
 function push() {
@@ -79,25 +93,24 @@ async function refresh() {
     const data = isDemo() ? fetchDemo() : await fetchUsage({ allowPaidFallback: store.get('paidFallback') });
     backoffSec = 0;
     const fetchedAt = Date.now();
-    payload = { state: 'ok', data, fetchedAt, message: '' };
-    store.set('last', { data, fetchedAt });
-    const hist = store.get('history').concat({ t: fetchedAt, s: data.session && data.session.pct, w: data.weekly && data.weekly.pct });
-    store.set('history', hist.slice(-60));
+    activeHistory().add(fetchedAt, data);
+    payload = withForecast({ state: 'ok', data, fetchedAt, message: '' });
+    if (!isDemo()) store.set('last', { data, fetchedAt });
     const thresholds = [];
     if (store.get('alert80')) thresholds.push(80);
     if (store.get('alert90')) thresholds.push(90);
-    if (thresholds.length) alerter(data, thresholds);
+    alerter(data, thresholds, { forecast: store.get('alertForecast') ? payload.forecast : null, now: fetchedAt });
   } catch (e) {
     const kind = e.kind || 'network';
     if (kind === 'ratelimit') backoffSec = nextBackoffSec(backoffSec, store.get('intervalSec'), e.retryAfterSec);
     const last = store.get('last');
-    payload = {
+    payload = withForecast({
       state: kind === 'network' ? 'offline' : kind,
       data: last ? last.data : null,
       fetchedAt: last ? last.fetchedAt : null,
       message: e.message || '',
       renewing: false,
-    };
+    });
     if (e.expired && store.get('autoRenew')) {
       payload.renewing = true;
       renewToken();
@@ -136,6 +149,7 @@ function buildMenu() {
       submenu: [
         { label: 'Avisar em 80%', type: 'checkbox', checked: store.get('alert80'), click: (i) => store.set('alert80', i.checked) },
         { label: 'Avisar em 90%', type: 'checkbox', checked: store.get('alert90'), click: (i) => store.set('alert90', i.checked) },
+        { label: 'Avisar quando a previsão for menor que 15 min', type: 'checkbox', checked: store.get('alertForecast'), click: (i) => store.set('alertForecast', i.checked) },
       ],
     },
     {
@@ -230,11 +244,14 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   store = createStore(app.getPath('userData'));
+  history = createHistory(app.getPath('userData'), { seed: store.get('history') || [] });
+  demoHistory = createHistory(app.getPath('userData'), { persist: false });
+  if (store.get('history')) store.set('history', undefined); // migrado para history.jsonl
   widget = createWidgetWindow(store);
   widget.win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   const last = store.get('last');
-  if (last) payload = { state: 'loading', data: last.data, fetchedAt: last.fetchedAt, message: '' };
+  if (last && !isDemo()) payload = withForecast({ state: 'loading', data: last.data, fetchedAt: last.fetchedAt, message: '' });
 
   if (process.argv.includes('--perf')) {
     widget.win.webContents.once('did-finish-load', async () => {

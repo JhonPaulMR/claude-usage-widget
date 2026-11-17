@@ -7,28 +7,28 @@ Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já 
 | Etapa | Assunto | Situação | Branch |
 |---|---|---|---|
 | 1 | Atualização (429, 5xx, token) | Implementada, aguardando teste do usuário | `etapa-1-atualizacao` |
-| 2 | Animação de abrir e fechar | Implementada, aguardando teste do usuário | `etapa-2-animacao` |
-| 3 | Histórico e previsão | A fazer | |
+| 2 | Animação de abrir e fechar | Testada pelo usuário no notebook (fluida) | `etapa-2-animacao` |
+| 3 | Histórico e previsão | Implementada, aguardando teste do usuário | `etapa-3-historico` |
 | 4 | Gráficos e tela de configurações | A fazer | |
 | 5 | Multi-monitor | A fazer | |
 | 6 | Mascote | A fazer | |
 
-**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-2-animacao`, que contém a etapa 1), usar por um dia e conferir "Como testar a etapa 1" e "Como testar a etapa 2". Só depois começar a etapa 3.
+**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-3-historico`, que contém as etapas 1 e 2), usar por alguns dias e conferir "Como testar a etapa 1" e "Como testar a etapa 3". Só depois começar a etapa 4.
 
-A etapa 2 foi iniciada a pedido do usuário antes do teste instalado da etapa 1; por isso a branch `etapa-2-animacao` parte de `etapa-1-atualizacao` e as duas são testadas juntas.
+Cada branch parte da anterior (`etapa-1-atualizacao` → `etapa-2-animacao` → `etapa-3-historico`), porque as etapas foram iniciadas a pedido do usuário antes do teste de um dia da etapa 1. Nada foi mesclado na `main`.
 
 ### Para continuar em outro PC
 
 ```bash
 git clone https://github.com/JhonPaulMR/claude-usage-widget.git
 cd claude-usage-widget
-git checkout etapa-2-animacao
+git checkout etapa-3-historico
 npm install
 npm test
 npm run dist
 ```
 
-O instalador (`dist/`) e os ícones (`build/`) não vão para o repositório; `npm run dist` gera os dois. As etapas 1 e 2 ainda não foram testadas instaladas nem mescladas na `main`.
+O instalador (`dist/`) e os ícones (`build/`) não vão para o repositório; `npm run dist` gera os dois. O histórico (`history.jsonl`) fica na pasta de dados de cada PC e não acompanha o repositório: em outro PC a previsão começa do zero.
 
 Regra de entrega: uma etapa por branch, um commit por etapa, lógica pura com testes em `node --test`, instalador ao fim de cada etapa, e só se avança depois do teste do usuário. O README é atualizado no final.
 
@@ -107,7 +107,7 @@ A medição conta o intervalo entre quadros na thread principal; não enxerga en
 3. Conferir que as barras de progresso dos cartões aparecem preenchidas.
 4. Se ainda travar, rodar `npx electron . --perf --demo` com o instalado fechado e anotar os números; o próximo suspeito é a janela transparente.
 
-## Etapa 3: histórico e previsão
+## Etapa 3: histórico e previsão (feita)
 
 **Causa da previsão otimista:** extrapolação linear da média desde o início da janela, incluindo o tempo ocioso (`format.js`, `paceProjection`).
 
@@ -119,6 +119,37 @@ A medição conta o intervalo entre quadros na thread principal; não enxerga en
 - Depois de 7 dias de histórico: a pessimista passa a ser o maior entre o ritmo recente e o ritmo forte habitual do usuário (percentil 75 das rajadas naquele horário e dia da semana).
 - Marcar a previsão como desatualizada quando o último dado tiver mais de 2 intervalos de idade.
 - Alerta novo: previsão abaixo de 15 minutos.
+
+### O que mudou
+
+- `src/main/history.js` (novo): histórico em `history.jsonl` na pasta de dados, uma linha `[t, sessão, semanal]` por consulta, 30 dias. Só acrescenta ao final; reescreve o arquivo ao limpar pontos vencidos. As 60 amostras que ficavam no `settings.json` são migradas e a chave some de lá. No modo demonstração o histórico fica só na memória.
+- `src/main/forecast.js` (novo): cálculo puro da previsão. Devolve `none`, `limit`, `low`, `safe` ou `range` com a hora pessimista (`earliest`) e a otimista (`latest`).
+- `src/shared/format.js`: `paceProjection` saiu; entraram `forecastText` e `forecastIsStale`.
+- `src/main/alerts.js`: aviso "acaba em ~N min", uma vez por janela, com o interruptor **Avisar quando a previsão for menor que 15 min** no menu Alertas (`alertForecast`, ligado).
+- Painel: a linha do ritmo virou "acaba entre **14:20** e 15:10", "pode acabar a partir de **14:20**" (quando o otimista não chega ao limite), "acaba por volta de **14:20**" (extremos a menos de 5 min) ou "não deve acabar nesta sessão". Com dado velho, fica esmaecida e ganha "· desatualizada".
+- A janela passou de 380 para 440 px de altura, para caber a previsão em duas linhas.
+
+### Decisões tomadas na implementação (não estavam no plano)
+
+- **Porcentagens inteiras:** o endpoint só devolve números inteiros, então o ritmo é medido entre "degraus" (momentos em que a porcentagem sobe) e não consulta a consulta. Mais de 15 min sem degrau conta como ocioso.
+- **Peso no recente:** meia-vida de 10 min de uso ativo.
+- **Semanal:** "20 min de uso ativo" extrapolado por dias daria uma previsão absurda. No semanal o ritmo recente é o das últimas 24 h corridas (com o tempo ocioso), e o otimista continua sendo a média da janela.
+- **Ritmo habitual:** rajadas com pelo menos 2 degraus e 5 min, no mesmo dia da semana e horário (±1 h). Com menos de 3 rajadas nesse recorte, vale o mesmo horário em qualquer dia; sem isso, não entra.
+- **Alerta de 15 min:** usa só o ritmo de agora (degrau há menos de 15 min). O ritmo habitual sozinho, com a pessoa parada, não dispara aviso.
+- **Widget fechado:** a subida observada depois de um buraco nas amostras é descartada, porque não se sabe quanto tempo levou.
+
+### Ainda não verificado
+
+- A qualidade da previsão com uso real: os testes usam séries sintéticas. Os primeiros dias dirão se 15 min de ocioso e 10 min de meia-vida estão bons.
+- O ritmo habitual só entra depois de 7 dias de histórico neste PC.
+
+### Como testar a etapa 3
+
+1. Usar o Claude por uns 20 min seguidos e abrir o painel: a sessão deve mostrar uma faixa ou "pode acabar a partir de", com a hora pessimista em destaque.
+2. Parar de usar: o texto se mantém (é o ritmo do último uso ativo); depois do reset volta a "consumo baixo" ou "não deve acabar".
+3. Desligar a rede por 3 min: a previsão fica esmaecida com "· desatualizada".
+4. Conferir que `%APPDATA%\claude-usage-widget\history.jsonl` ganha uma linha por consulta.
+5. Depois de 7 dias, ver se a previsão pessimista passou a refletir os horários de uso forte.
 
 ## Etapa 4: gráficos e configurações
 

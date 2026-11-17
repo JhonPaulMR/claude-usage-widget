@@ -43,20 +43,25 @@ function formatResetAt(resetsAt, now = Date.now()) {
   return `${WEEKDAYS[d.getDay()]} ${hhmm}`;
 }
 
-// Extrapolação linear dentro da janela atual.
-// Retorna { level: 'ok'|'warn'|'none', text }
-function paceProjection(pct, resetsAt, windowMs, now = Date.now()) {
-  if (pct == null || resetsAt == null) return { level: 'none', text: '' };
-  const remaining = resetsAt - now;
-  const elapsed = windowMs - remaining;
-  if (pct >= 100) return { level: 'warn', text: 'limite atingido' };
-  if (elapsed <= 60000 || pct <= 0) return { level: 'ok', text: 'consumo baixo' };
-  const rate = pct / elapsed; // % por ms
-  const toLimit = (100 - pct) / rate;
-  if (toLimit < remaining) {
-    return { level: 'warn', text: `no ritmo de acabar em ~${formatCountdown(toLimit)}` };
-  }
-  return { level: 'ok', text: 'ritmo confortável' };
+// Texto da previsão (resultado de forecast.js). kind: 'session' | 'weekly'.
+// Devolve { level: 'ok'|'warn'|'none', pre, strong, post }; strong é a hora pessimista, em destaque.
+const FORECAST_NARROW_MS = { session: 5 * 60 * 1000, weekly: 60 * 60 * 1000 };
+function forecastText(fc, kind, now = Date.now()) {
+  const plain = (level, pre) => ({ level, pre, strong: '', post: '' });
+  if (!fc || fc.status === 'none') return plain('none', '');
+  if (fc.status === 'limit') return plain('warn', 'limite atingido');
+  if (fc.status === 'low') return plain('ok', 'consumo baixo');
+  if (fc.status === 'safe') return plain('ok', kind === 'weekly' ? 'não deve acabar nesta semana' : 'não deve acabar nesta sessão');
+  const at = (t) => (kind === 'weekly' ? formatResetAt(t, now) : formatClock(t));
+  if (fc.latest == null) return { level: 'warn', pre: 'pode acabar a partir de ', strong: at(fc.earliest), post: '' };
+  if (fc.latest - fc.earliest < FORECAST_NARROW_MS[kind]) return { level: 'warn', pre: 'acaba por volta de ', strong: at(fc.earliest), post: '' };
+  return { level: 'warn', pre: 'acaba entre ', strong: at(fc.earliest), post: ` e ${at(fc.latest)}` };
+}
+
+// A previsão está velha quando o último dado tem mais de 2 intervalos de idade.
+function forecastIsStale(fetchedAt, intervalSec, now = Date.now()) {
+  if (!fetchedAt || !intervalSec) return false;
+  return now - fetchedAt > 2 * intervalSec * 1000;
 }
 
 // 100000 -> "1:40"; usado na contagem para a próxima tentativa
@@ -78,7 +83,8 @@ const api = {
   clampPct,
   formatCountdown,
   formatResetAt,
-  paceProjection,
+  forecastText,
+  forecastIsStale,
   formatMmSs,
   formatClock,
 };

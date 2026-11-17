@@ -5,7 +5,7 @@ const path = require('path');
 // Janela de tamanho fixo (transparente). Expandir/recolher é só CSS; fora do widget ela é
 // "click-through" (setIgnoreMouseEvents), então não bloqueia os apps embaixo.
 const WIN_W = 308;
-const WIN_H = 380;
+const WIN_H = 440; // cabe o painel com a previsão em duas linhas e os modelos
 const WIN_CLAMP_H = 240; // o widget visível é menor que a janela; permite encostar embaixo
 
 function createWidgetWindow(store) {

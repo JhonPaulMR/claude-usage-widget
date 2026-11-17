@@ -6,6 +6,7 @@ const DEFAULTS = {
   intervalSec: 60,
   alert80: true,
   alert90: true,
+  alertForecast: true, // avisa quando a previsão de acabar for menor que 15 min
   autostart: false,
   autostartInit: false, // true depois de aplicar o padrão da primeira execução instalada
   visible: true,
@@ -17,7 +18,6 @@ const DEFAULTS = {
   autoRenewPaid: true, // permite a requisição mínima (Haiku) se o comando gratuito não renovar
   paidFallback: false, // plano B via /v1/messages quando o formato do endpoint mudar
   last: null, // { data, fetchedAt }
-  history: [], // últimas amostras { t, s, w }
 };
 
 function createStore(dir) {
