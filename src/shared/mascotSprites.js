@@ -4,7 +4,8 @@
 // Cada linha tem 16 caracteres. As 5 primeiras linhas são o espaço acima da cabeça (símbolos);
 // as 10 seguintes são o corpo. Legenda:
 //   .  transparente        o  corpo (laranja)       g  corpo sem vida (cinza)
-//   k  olho, boca (escuro) w  símbolo (branco)      b  gota de suor (azul)
+//   k  olho (escuro)       w  símbolo (branco)      b  gota de suor (azul)
+// O mascote não tem boca, como o original: as emoções saem dos olhos, braços e símbolos.
 // Quem anda para a esquerda usa o quadro espelhado na hora de desenhar.
 
 const MASCOT_W = 16;
@@ -18,7 +19,7 @@ const BODY = '..oooooooooooo..';
 const BODY_ARMS = 'oooooooooooooooo';
 const EYES = '..ookooooookoo..'; // olhos verticais de 1 px, como no original
 const LEGS = '...o.o....o.o...';
-const MOUTH = '..oooookkooooo..';
+const WALK_EYES = '..oookooooooko..'; // olhando para onde anda
 
 const MASCOT_POSES = {
   // Parado, sem emoção: a forma original.
@@ -70,7 +71,7 @@ const MASCOT_POSES = {
     LEGS,
   ]],
 
-  // A previsão pessimista acaba antes do reset: sobrancelhas erguidas no meio, boca e gota de suor.
+  // A previsão pessimista acaba antes do reset: sobrancelhas erguidas no meio e gota de suor.
   preocupado: [[
     ...NO_SYMBOL,
     '..oookooookooo.b',
@@ -79,7 +80,7 @@ const MASCOT_POSES = {
     EYES,
     'ooookooooookoooo',
     BODY_ARMS,
-    MOUTH,
+    BODY,
     BODY,
     LEGS,
     LEGS,
@@ -119,37 +120,15 @@ const MASCOT_POSES = {
     '..gggggggggggg..',
   ]],
 
-  // Andando para a direita: olhos deslocados e pernas alternando.
+  // Andando para a direita, quatro quadros: passo, apoio, passo com a outra perna, apoio.
   andando: [
-    [
-      ...NO_SYMBOL,
-      BODY,
-      BODY,
-      '..oookooooooko..',
-      '..oookooooooko..',
-      BODY_ARMS,
-      BODY_ARMS,
-      BODY,
-      BODY,
-      LEGS,
-      '...o......o.....',
-    ],
-    [
-      ...NO_SYMBOL,
-      BODY,
-      BODY,
-      '..oookooooooko..',
-      '..oookooooooko..',
-      BODY_ARMS,
-      BODY_ARMS,
-      BODY,
-      BODY,
-      LEGS,
-      '.....o......o...',
-    ],
+    [...NO_SYMBOL, BODY, BODY, WALK_EYES, WALK_EYES, BODY_ARMS, BODY_ARMS, BODY, BODY, LEGS, '...o......o.....'],
+    [...NO_SYMBOL, BODY, BODY, WALK_EYES, WALK_EYES, BODY_ARMS, BODY_ARMS, BODY, BODY, LEGS, LEGS],
+    [...NO_SYMBOL, BODY, BODY, WALK_EYES, WALK_EYES, BODY_ARMS, BODY_ARMS, BODY, BODY, LEGS, '.....o......o...'],
+    [...NO_SYMBOL, BODY, BODY, WALK_EYES, WALK_EYES, BODY_ARMS, BODY_ARMS, BODY, BODY, LEGS, LEGS],
   ],
 
-  // Solto no ar: braços para cima, olhos arregalados, boca aberta, pernas abertas.
+  // Solto no ar: braços para cima, olhos arregalados, pernas abertas.
   caindo: [[
     BLANK,
     BLANK,
@@ -161,41 +140,17 @@ const MASCOT_POSES = {
     '..okkooooookko..',
     '..okkooooookko..',
     BODY,
-    MOUTH,
-    MOUTH,
+    BODY,
+    BODY,
     BODY,
     '..o..o....o..o..',
     '.o...o....o...o.',
   ]],
 
-  // Dando um alerta: boca abrindo e fechando.
+  // Dando um alerta: gesticula com um braço enquanto o balão de fala aparece.
   falando: [
-    [
-      ...NO_SYMBOL,
-      BODY,
-      BODY,
-      EYES,
-      EYES,
-      BODY_ARMS,
-      BODY_ARMS,
-      MOUTH,
-      BODY,
-      LEGS,
-      LEGS,
-    ],
-    [
-      ...NO_SYMBOL,
-      BODY,
-      BODY,
-      EYES,
-      EYES,
-      BODY_ARMS,
-      'oooooookkooooooo',
-      MOUTH,
-      BODY,
-      LEGS,
-      LEGS,
-    ],
+    [...NO_SYMBOL, BODY, BODY, EYES, EYES, BODY_ARMS, BODY_ARMS, BODY, BODY, LEGS, LEGS],
+    [...NO_SYMBOL, BODY, BODY, '..ookooooookoooo', '..ookooooookoooo', 'oooooooooooooo..', 'oooooooooooooo..', BODY, BODY, LEGS, LEGS],
   ],
 };
 

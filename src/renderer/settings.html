@@ -26,6 +26,33 @@
     </section>
 
     <section>
+      <h2>Modo de exibição</h2>
+      <label class="field">
+        <span>Aparência do widget<small>No modo mascote as abas da borda somem.</small></span>
+        <select data-key="mode">
+          <option value="classic">Clássico</option>
+          <option value="mascot">Mascote</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Movimento do mascote<small>Fixo fica onde for solto; passeio anda sobre a barra de tarefas.</small></span>
+        <select data-key="mascotMove" data-enabled-when="mode=mascot">
+          <option value="walk">Passeio</option>
+          <option value="fixed">Fixo</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Frequência do passeio</span>
+        <select data-key="mascotFreq" data-enabled-when="mascotMove=walk">
+          <option value="rare">Raro</option>
+          <option value="normal">Normal</option>
+          <option value="often">Frequente</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" data-key="mascotNotify" data-enabled-when="mode=mascot" /><span>Além da fala do mascote, mostrar a notificação do Windows</span></label>
+    </section>
+
+    <section>
       <h2>Gráficos</h2>
       <label class="field">
         <span>Gráficos no painel</span>

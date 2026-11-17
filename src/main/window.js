@@ -12,19 +12,25 @@ const TAB_MARGIN = 20;
 
 // `--split-display` (desenvolvimento): divide o monitor principal em dois falsos, lado a lado,
 // para conferir o multi-monitor num PC com uma tela só.
-const FAKE_SPLIT = process.argv.includes('--split-display');
+// `--split-display=40` deixa o chão do segundo 40 px mais alto (testa pulo e queda do mascote).
+const SPLIT_ARG = process.argv.find((a) => a.startsWith('--split-display'));
+const FAKE_SPLIT = !!SPLIT_ARG;
+const SPLIT_STEP = FAKE_SPLIT ? Number(SPLIT_ARG.split('=')[1]) || 0 : 0;
 function listDisplays() {
   if (!FAKE_SPLIT) return { all: screen.getAllDisplays(), primaryId: screen.getPrimaryDisplay().id };
   const p = screen.getPrimaryDisplay();
   const half = Math.floor(p.workArea.width / 2);
-  const part = (id, x, width) => ({ id, size: { width, height: p.size.height }, workArea: { ...p.workArea, x, width } });
-  return { all: [part(1, p.workArea.x, half), part(2, p.workArea.x + half, p.workArea.width - half)], primaryId: 1 };
+  const part = (id, x, width) => ({ id, size: { width, height: p.size.height }, bounds: { ...p.bounds, x, width }, workArea: { ...p.workArea, x, width } });
+  const second = part(2, p.workArea.x + half, p.workArea.width - half);
+  second.workArea.height -= SPLIT_STEP;
+  return { all: [part(1, p.workArea.x, half), second], primaryId: 1 };
 }
 
 // opts.onChange(): chamado quando a lista de monitores ou as marcações mudam.
 function createWidgetManager(store, opts = {}) {
   const wins = new Map(); // id do monitor -> { id, win, dragStartTop }
   let clampH = 220 + TAB_MARGIN; // a aba recolhida é menor que a janela; permite encostar embaixo
+  let suppressed = false; // modo mascote: as abas clássicas somem, mas guardam a posição
 
   const cfg = () => store.get('displays') || {};
 
@@ -53,12 +59,13 @@ function createWidgetManager(store, opts = {}) {
     });
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setMenuBarVisibility(false);
+    win.setIgnoreMouseEvents(true, { forward: true }); // a interface libera quando o mouse entra no widget
     const entry = { id, win, dragStartTop: 0 };
     wins.set(id, entry);
     win.webContents.once('did-finish-load', () => {
       if (win.isDestroyed()) return;
       place(entry);
-      if (store.get('visible')) win.showInactive();
+      if (store.get('visible') && !suppressed) win.showInactive();
     });
     win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
     return entry;
@@ -124,9 +131,20 @@ function createWidgetManager(store, opts = {}) {
     setVisible(show) {
       for (const { win } of wins.values()) {
         if (win.isDestroyed()) continue;
-        if (show) win.showInactive();
+        if (show && !suppressed) win.showInactive();
         else win.hide();
       }
+    },
+    // Modo mascote ligado: esconde as abas. Desligado: elas voltam onde estavam.
+    setSuppressed(on) {
+      suppressed = !!on;
+      this.setVisible(store.get('visible'));
+    },
+    // Monitores marcados e ligados (é por onde o mascote anda).
+    enabledDisplays() {
+      const { all, primaryId } = listDisplays();
+      const on = rules.resolveEnabled(cfg(), all.map((d) => d.id), primaryId);
+      return all.filter((d) => on.includes(d.id));
     },
     setIgnoreMouse(wc, ignore) {
       const entry = bySender(wc);

@@ -1,6 +1,6 @@
 {
   "name": "claude-usage-widget",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Widget fixo na lateral direita com os limites de uso do Claude (sessão de 5h e semanal).",
   "main": "src/main/main.js",
   "private": true,

@@ -11,18 +11,20 @@ Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já 
 | 3 | Histórico e previsão | Implementada, aguardando teste do usuário | `etapa-3-historico` |
 | 4 | Gráficos e tela de configurações | Implementada, aguardando teste do usuário | `etapa-4-graficos-config` |
 | 5 | Multi-monitor | Implementada, aguardando teste do usuário | `etapa-5-multi-monitor` |
-| 6 | Mascote | Folha de poses pronta, aguardando aprovação | `etapa-6-mascote` |
+| 6 | Mascote | Implementada (poses aprovadas), aguardando teste do usuário | `etapa-6-mascote` |
 
-**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-5-multi-monitor`, que contém as etapas 1 a 4), usar por alguns dias e conferir "Como testar" das etapas 1, 3, 4 e 5. A etapa 6 começa pela folha de poses, que precisa de aprovação.
+**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.2.0.exe` (gerado por `npm run dist` na branch `etapa-6-mascote`, que contém todas as etapas), usar por alguns dias e conferir "Como testar" das etapas 1, 3, 4, 5 e 6. Depois, mesclar na `main`.
 
-Cada branch parte da anterior (`etapa-1-atualizacao` → `etapa-2-animacao` → `etapa-3-historico` → `etapa-4-graficos-config` → `etapa-5-multi-monitor`), porque as etapas foram iniciadas a pedido do usuário antes do teste de um dia da etapa 1. Nada foi mesclado na `main`.
+Cada branch parte da anterior (`etapa-1-atualizacao` → `etapa-2-animacao` → `etapa-3-historico` → `etapa-4-graficos-config` → `etapa-5-multi-monitor` → `etapa-6-mascote`), porque as etapas foram feitas em sequência a pedido do usuário, antes dos testes de uso. Nada foi mesclado na `main`. A versão passou para 0.2.0 e o README foi atualizado na etapa 6.
+
+**Pendência de decisão:** o repositório no GitHub é público, e o plano diz que o desenho do mascote é para uso pessoal, sem distribuição. Enviar a branch `etapa-6-mascote` publica o desenho. Ela fica só local até o usuário decidir (tornar o repositório privado, enviar assim mesmo, ou trocar o desenho).
 
 ### Para continuar em outro PC
 
 ```bash
 git clone https://github.com/JhonPaulMR/claude-usage-widget.git
 cd claude-usage-widget
-git checkout etapa-5-multi-monitor
+git checkout etapa-6-mascote
 npm install
 npm test
 npm run dist
@@ -229,13 +231,52 @@ Painel com gráficos (443 px de altura): em 5 medições, 4 sem nenhum quadro ac
 4. Desligar o cabo do segundo monitor e ligar de novo: o widget some dele e volta no mesmo lugar.
 5. Se os monitores tiverem escalas diferentes, conferir se o widget fica colado na borda direita nos dois.
 
-## Etapa 6: mascote (em andamento)
+## Etapa 6: mascote (feita)
 
-### Feito até agora
+### O que mudou
 
-- `src/shared/mascotSprites.js`: nove poses em matrizes de 16 × 15 pixels (neutro, feliz, cansado, preocupado, confuso, morto, andando, caindo, falando). A forma base segue o mascote do Claude Code: corpo largo, olhos verticais de 1 pixel, um braço de cada lado e quatro pernas.
-- `docs/mascote-poses.png`: folha de poses para aprovação, gerada por `npm run mascot:sheet` (página em `scripts/mascot/`, fora do instalador).
-- Nada do mascote aparece no widget ainda. O modo mascote, o passeio, a gravidade e as falas só começam depois da aprovação das poses.
+- `src/shared/mascotSprites.js`: nove poses em matrizes de 16 × 15 pixels (neutro, feliz, cansado, preocupado, confuso, morto, andando com 4 quadros, caindo, falando com 2 quadros). Sem boca, como o original: um teste garante que só há pixel escuro na altura dos olhos. Folha em `docs/mascote-poses.png` (`npm run mascot:sheet`).
+- `src/main/mascotLogic.js` (novo): regras puras. Emoção, resumo, sorteio do passeio, vizinhança entre monitores, passo andando, passo no ar (gravidade), pulo, detecção de tela cheia e posição do balão.
+- `src/main/mascot.js` (novo): a janela do mascote (540 × 170, transparente) e o balão com o painel. O relógio de movimento (60 vezes por segundo) só roda enquanto ele anda ou está no ar.
+- `src/renderer/mascot.html|js|css` (novos): desenho em canvas de 16 × 15 ampliado 4 vezes.
+- `src/main/main.js`: `applyMode()` troca entre os modos; no mascote as abas clássicas são escondidas (não destruídas) e voltam na posição salva.
+- Painel em balão: a própria página do painel com `?balloon=1` (sem a aba, sempre aberto), posicionada acima do mascote ou abaixo se não couber.
+- Configurações: seção **Modo de exibição** (clássico ou mascote, passeio ou fixo, frequência, notificação junto com a fala). Menu: item **Modo mascote**.
+- Correção que veio junto: as janelas do widget nasciam bloqueando cliques na área transparente até o primeiro hover; agora nascem ignorando o mouse.
+
+### Animações
+
+Todo movimento do corpo é animação CSS de `transform`, que roda no compositor: respirar (neutro), quicar (feliz), afundar devagar (cansado), tremer (preocupado), balançar a cabeça (confuso), gingar andando, esticar no ar, pendurar ao ser arrastado, quicar falando, amassar e voltar ao pousar, e um "pop" ao trocar de emoção. O JavaScript só troca o quadro (andar a cada 120 ms, falar a cada 240 ms) e faz piscar. O deslocamento pela tela é a janela se movendo a 70 px/s; na medição o passo máximo foi de 2 px por quadro.
+
+### Decisões tomadas na implementação (não estavam no plano)
+
+- **Sem boca** (pedido do usuário na aprovação das poses). "Falando" virou um gesto com o braço, e o texto vai no balão.
+- **Padrão do movimento:** passeio.
+- **Frequência:** raro 5 a 10 min, normal 2 a 5 min, frequente 30 s a 2 min.
+- **Limite de consultas "longo"** (confuso): próxima tentativa a mais de 2 min.
+- **Tela cheia:** antes de cada trecho de passeio, um PowerShell escondido lê o retângulo e a classe da janela em primeiro plano. Se ela cobre um monitor inteiro (e não é a área de trabalho), o passeio é adiado. É uma chamada a cada poucos minutos; se falhar, ele anda normalmente.
+- **Balão do painel:** fecha com outro clique no mascote, 3 s depois de o mouse sair dele, ou 12 s sem o mouse entrar.
+- **Vizinho:** só monitor colado na lateral conta. Monitor em cima ou embaixo não é caminho.
+- **Fala:** dura 7 s e ele para de andar enquanto fala.
+
+### Ainda não verificado
+
+- **Monitores de verdade com chão em alturas diferentes.** Pulo e queda foram testados com `--split-display=40`.
+- **A detecção de tela cheia** com jogo ou vídeo real. Só a regra foi testada (com retângulos de exemplo).
+- **Fluidez percebida** no notebook: as capturas mostram as poses, não o movimento.
+- **Escalas de tela diferentes** entre monitores.
+
+### Como testar a etapa 6
+
+1. Botão direito → **Modo mascote**: as abas somem e o mascote aparece sobre a barra de tarefas.
+2. Passar o mouse nele: resumo de sessão e semanal. Clicar: o painel abre em balão; clicar de novo fecha.
+3. Arrastar para o alto e soltar: cai, amassa ao pousar e volta ao normal.
+4. Em Configurações, pôr a frequência em **Frequente** e observar alguns passeios: o andar deve ser contínuo, sem trancos.
+5. Com dois monitores marcados, ver se ele atravessa de um para o outro.
+6. Abrir um vídeo em tela cheia por alguns minutos: ele não deve andar por cima.
+7. Trocar para **Fixo** e soltar no meio da tela: fica onde foi solto.
+8. Baixar um limiar de alerta para logo acima do uso atual: o aviso vira fala.
+9. Desmarcar **Modo mascote**: as abas voltam onde estavam.
 
 ### Decisão
 

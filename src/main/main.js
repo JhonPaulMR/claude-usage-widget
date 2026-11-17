@@ -12,6 +12,7 @@ const { forecastAll } = require('./forecast');
 const { buildCharts } = require('./chart');
 const prefs = require('./prefs');
 const { createSettingsWindow } = require('./settingsWindow');
+const { createMascot } = require('./mascot');
 
 const FORCE_DEMO = process.argv.includes('--demo');
 const SHORTCUT = 'Control+Alt+U';
@@ -21,7 +22,7 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-let store, widgets, tray, settingsWin, pollTimer, backoffSec = 0;
+let store, widgets, mascot, tray, settingsWin, pollTimer, backoffSec = 0;
 let history, demoHistory; // pontos reais (arquivo) e pontos da demonstração (só memória)
 let payload = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
 let fetching = false;
@@ -29,7 +30,10 @@ let lastRenewal = null; // resultado da última tentativa de renovar o token (ap
 
 const tokenRefresher = createTokenRefresher({ readExpiry, log: (r) => { lastRenewal = { ...r, at: Date.now() }; } });
 
+// No modo mascote o alerta vira fala; a notificação do Windows continua, a menos que seja desligada.
 const alerter = createAlerter((title, body) => {
+  if (mascot) mascot.say(title);
+  if (mascot && !store.get('mascotNotify')) return;
   if (Notification.isSupported()) new Notification({ title, body, silent: false }).show();
 });
 
@@ -55,6 +59,24 @@ function prefsPayload() {
 
 function pushPrefs() {
   if (widgets) widgets.broadcast('prefs', prefsPayload());
+  if (mascot) mascot.toBalloon('prefs', prefsPayload());
+}
+
+// Liga ou desliga o modo mascote. Os modos são exclusivos: no mascote as abas clássicas somem.
+function applyMode() {
+  const on = store.get('mode') === 'mascot';
+  widgets.setSuppressed(on);
+  if (on && !mascot) {
+    mascot = createMascot({
+      store,
+      getDisplays: () => widgets.enabledDisplays(),
+      onMenu: (win) => buildMenu().popup({ window: win }),
+    });
+    mascot.update(payload);
+  } else if (!on && mascot) {
+    mascot.destroy();
+    mascot = null;
+  }
 }
 
 function activeHistory() {
@@ -74,6 +96,10 @@ function withForecast(p) {
 
 function push() {
   if (widgets) widgets.broadcast('usage', payload);
+  if (mascot) {
+    mascot.toBalloon('usage', payload);
+    mascot.update(payload);
+  }
 }
 
 // Agenda a próxima consulta e registra quando ela será (a interface mostra a contagem).
@@ -151,6 +177,12 @@ function buildMenu() {
       accelerator: SHORTCUT,
       click: toggleVisible,
     },
+    {
+      label: 'Modo mascote',
+      type: 'checkbox',
+      checked: store.get('mode') === 'mascot',
+      click: (i) => applyPref('mode', i.checked ? 'mascot' : 'classic'),
+    },
     { label: 'Configurações…', click: openSettings },
     { type: 'separator' },
     { label: 'Sair', click: () => app.quit() },
@@ -219,6 +251,11 @@ function applyPref(key, value) {
     push();
   } else if (key === 'theme' || key.startsWith('compact')) {
     pushPrefs();
+    if (mascot) mascot.refreshPrefs();
+  } else if (key === 'mode') {
+    applyMode();
+  } else if (key.startsWith('mascot')) {
+    if (mascot) mascot.refreshPrefs();
   } else if (key === 'autostart') {
     applyAutostart();
   } else if (key === 'demo') {
@@ -236,6 +273,7 @@ function toggleVisible() {
   const show = !store.get('visible');
   store.set('visible', show);
   widgets.setVisible(show);
+  if (mascot) mascot.setVisible(show);
   rebuildMenu();
 }
 
@@ -249,8 +287,11 @@ app.whenReady().then(() => {
   history = createHistory(app.getPath('userData'), { seed: store.get('history') || [] });
   demoHistory = createHistory(app.getPath('userData'), { persist: false });
   if (store.get('history')) store.set('history', undefined); // migrado para history.jsonl
-  widgets = createWidgetManager(store, { onChange: rebuildMenu });
+  widgets = createWidgetManager(store, { onChange: () => { rebuildMenu(); if (mascot) mascot.onDisplaysChanged(); } });
   widgets.sync();
+  applyMode();
+  // Ganchos de desenvolvimento, para testes automatizados da interface.
+  if (process.argv.includes('--dev-hooks')) global.__widget = { mascot: () => mascot, widgets, applyPref };
 
   const last = store.get('last');
   if (last && !isDemo()) payload = withForecast({ state: 'loading', data: last.data, fetchedAt: last.fetchedAt, message: '' });
@@ -267,7 +308,7 @@ app.whenReady().then(() => {
   }
   // Cada janela do widget avisa quando carregou e recebe o estado atual.
   ipcMain.on('ready', (e) => {
-    if (!widgets.bySender(e.sender)) return;
+    if (!widgets.bySender(e.sender) && !(mascot && mascot.isBalloon(e.sender))) return;
     e.sender.send('prefs', prefsPayload());
     e.sender.send('usage', payload);
   });
@@ -282,13 +323,28 @@ app.whenReady().then(() => {
   });
   ipcMain.on('settings:display', (e, id, enabled) => { if (fromSettings(e)) widgets.setEnabled(id, !!enabled); });
   ipcMain.on('refresh', refresh);
-  ipcMain.on('set-ignore', (e, ignore) => widgets.setIgnoreMouse(e.sender, ignore));
+  ipcMain.on('set-ignore', (e, ignore) => {
+    if (mascot && mascot.isBalloon(e.sender)) mascot.setBalloonIgnore(ignore);
+    else widgets.setIgnoreMouse(e.sender, ignore);
+  });
+  ipcMain.on('content-height', (e, h) => { if (mascot && mascot.isBalloon(e.sender)) mascot.setBalloonHeight(h); });
+  ipcMain.on('balloon-hover', (e, inside) => { if (mascot && mascot.isBalloon(e.sender)) mascot.balloonHover(!!inside); });
+  // Janela do mascote
+  const fromMascot = (e) => mascot && mascot.isMascot(e.sender);
+  ipcMain.on('mascot:ready', (e) => { if (fromMascot(e)) mascot.update(payload); });
+  ipcMain.on('mascot:ignore', (e, ignore) => { if (fromMascot(e)) mascot.setIgnore(ignore); });
+  ipcMain.on('mascot:drag-start', (e) => { if (fromMascot(e)) mascot.dragStart(); });
+  ipcMain.on('mascot:drag-move', (e, dx, dy) => { if (fromMascot(e)) mascot.dragMove(dx, dy); });
+  ipcMain.on('mascot:drag-end', (e) => { if (fromMascot(e)) mascot.dragEnd(); });
+  ipcMain.on('mascot:click', (e) => { if (fromMascot(e)) mascot.click(); });
+  ipcMain.on('mascot:menu', (e) => { if (fromMascot(e)) mascot.menu(); });
   ipcMain.on('drag-start', (e) => widgets.dragStart(e.sender));
   ipcMain.on('drag-move', (e, dy) => widgets.dragMove(e.sender, dy));
-  ipcMain.on('tab-height', (_e, h) => widgets.setTabHeight(h));
+  ipcMain.on('tab-height', (e, h) => { if (widgets.bySender(e.sender)) widgets.setTabHeight(h); });
   ipcMain.on('context-menu', (e) => {
     const entry = widgets.bySender(e.sender);
     if (entry) buildMenu().popup({ window: entry.win });
+    else if (mascot && mascot.isBalloon(e.sender)) buildMenu().popup();
   });
 
   const trayIcon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'build', 'tray.png'));
@@ -313,6 +369,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  if (mascot) mascot.destroy(); // grava a posição
   globalShortcut.unregisterAll();
   if (store) store.flush();
 });

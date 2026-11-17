@@ -1,0 +1,103 @@
+/* Mascote: o desenho é um canvas de 16 x 15 ampliado 4x. Todo movimento do corpo é animação CSS
+   de transform (roda no compositor, fluida); o JavaScript só troca o quadro e a classe da pose. */
+:root {
+  --bubble-bg: #1d1d20;
+  --bubble-fg: #f4f4f2;
+  --bubble-line: rgba(255, 255, 255, 0.14);
+  --shift: 0px;
+}
+body[data-theme='light'] {
+  --bubble-bg: #ffffff;
+  --bubble-fg: #1d1d1f;
+  --bubble-line: rgba(0, 0, 0, 0.14);
+}
+
+* { box-sizing: border-box; margin: 0; }
+html, body { background: transparent; overflow: hidden; height: 100%; user-select: none; }
+body { font: 12px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; }
+
+.actor {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 64px;
+  height: 60px;
+  margin-left: -32px;
+  transform-origin: 50% 100%;
+  cursor: grab;
+  will-change: transform;
+}
+.actor:active { cursor: grabbing; }
+.squash { width: 100%; height: 100%; transform-origin: 50% 100%; will-change: transform; }
+canvas { display: block; width: 64px; height: 60px; image-rendering: pixelated; }
+
+/* ---- poses contínuas (na .actor) ---- */
+@keyframes breathe { from { transform: scale(1, 1); } to { transform: scale(0.985, 1.035); } }
+@keyframes happy { from { transform: translateY(0) scale(1.01, 0.99); } to { transform: translateY(-4px) scale(0.99, 1.02); } }
+@keyframes tired { from { transform: scale(1.01, 0.97); } to { transform: scale(1, 1); } }
+@keyframes worried { 0% { transform: translateX(-1px); } 50% { transform: translateX(1px) scale(1, 1.02); } 100% { transform: translateX(-1px); } }
+@keyframes confused { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+@keyframes walk {
+  0% { transform: translateY(0) rotate(-2.5deg); }
+  25% { transform: translateY(-3px) rotate(0deg); }
+  50% { transform: translateY(0) rotate(2.5deg); }
+  75% { transform: translateY(-3px) rotate(0deg); }
+  100% { transform: translateY(0) rotate(-2.5deg); }
+}
+@keyframes air { from { transform: scale(0.94, 1.08) rotate(-4deg); } to { transform: scale(0.94, 1.08) rotate(4deg); } }
+@keyframes dangle { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
+@keyframes talk { from { transform: translateY(0) scale(1, 1); } to { transform: translateY(-3px) scale(0.98, 1.03); } }
+
+.a-neutro { animation: breathe 2.6s ease-in-out infinite alternate; }
+.a-feliz { animation: happy 0.9s ease-in-out infinite alternate; }
+.a-cansado { animation: tired 3.8s ease-in-out infinite alternate; }
+.a-preocupado { animation: worried 0.5s ease-in-out infinite; }
+.a-confuso { animation: confused 2.2s ease-in-out infinite alternate; }
+.a-morto { animation: none; }
+.a-walk { animation: walk 0.48s linear infinite; }
+.a-air { animation: air 0.28s ease-in-out infinite alternate; }
+.a-drag { animation: dangle 0.55s ease-in-out infinite alternate; transform-origin: 50% 0; }
+.a-talk { animation: talk 0.24s ease-in-out infinite alternate; }
+
+/* ---- efeitos de uma vez (na .squash) ---- */
+@keyframes land {
+  0% { transform: scale(1.28, 0.68); }
+  35% { transform: scale(0.92, 1.1); }
+  65% { transform: scale(1.05, 0.96); }
+  100% { transform: scale(1, 1); }
+}
+@keyframes pop {
+  0% { transform: scale(1, 1); }
+  40% { transform: scale(1.12, 1.12); }
+  100% { transform: scale(1, 1); }
+}
+.fx-land { animation: land 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
+.fx-pop { animation: pop 0.28s ease-out; }
+
+/* ---- balão de fala e de resumo ---- */
+.bubble {
+  position: absolute;
+  left: 50%;
+  bottom: 72px;
+  max-width: 250px;
+  width: max-content;
+  padding: 7px 11px;
+  border-radius: 11px;
+  background: var(--bubble-bg);
+  color: var(--bubble-fg);
+  border: 1px solid var(--bubble-line);
+  text-align: center;
+  white-space: pre-line;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(calc(-50% + var(--shift))) translateY(6px) scale(0.96);
+  transform-origin: 50% 100%;
+  transition: opacity 0.18s ease-out, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bubble.show { opacity: 1; transform: translateX(calc(-50% + var(--shift))) translateY(0) scale(1); }
+.bubble.speech { font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .actor, .squash { animation: none !important; }
+}

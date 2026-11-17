@@ -6,12 +6,12 @@ const INFO = {
   neutro: ['Neutro', 'Forma original, parado. Base das outras poses.'],
   feliz: ['Feliz', 'Ritmo tranquilo. Olhos em arco, braços para cima.'],
   cansado: ['Cansado', 'Semanal acima de 50%. Olhos semicerrados, braços caídos, "z z".'],
-  preocupado: ['Preocupado', 'A previsão pessimista acaba antes do reset. Sobrancelhas, boca e gota de suor.'],
+  preocupado: ['Preocupado', 'A previsão pessimista acaba antes do reset. Sobrancelhas e gota de suor.'],
   confuso: ['Confuso', 'Sem dados (sem conexão, token expirado, limite de consultas). Olhos desiguais e "?".'],
   morto: ['Morto', 'Limite atingido antes do reset. De pernas para o ar, cinza, olhos em X.'],
-  andando: ['Andando', 'Modo passeio. Dois quadros; para a esquerda usa o espelho.'],
+  andando: ['Andando', 'Modo passeio. Quatro quadros; para a esquerda usa o espelho.'],
   caindo: ['Caindo', 'Solto no ar ou pulando para um chão mais baixo.'],
-  falando: ['Falando', 'Alerta virando fala. Boca abre e fecha.'],
+  falando: ['Falando', 'Alerta virando fala. Gesticula com um braço; o texto vai no balão.'],
 };
 
 function draw(frame, scale, theme) {

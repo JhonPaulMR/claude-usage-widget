@@ -33,6 +33,10 @@ const RULES = {
   theme: oneOf(['dark', 'light']),
   autostart: bool,
   demo: bool,
+  mode: oneOf(['classic', 'mascot']),
+  mascotMove: oneOf(['fixed', 'walk']),
+  mascotFreq: oneOf(['rare', 'normal', 'often']),
+  mascotNotify: bool,
 };
 
 // Devolve { ok, value }. ok=false: chave desconhecida ou valor inválido.

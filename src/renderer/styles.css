@@ -65,6 +65,14 @@ body { font: 13px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-ser
 .widget.open, .open .clip-y, .open .surface { transform: none; }
 .widget.init, .widget.init * { transition: none !important; }
 
+/* ---- balão do mascote: o painel sozinho, sempre aberto, com os quatro cantos arredondados ---- */
+@keyframes balloon-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
+.balloon .widget { width: var(--panel-w); border-radius: 22px; transform: none; transition: none; animation: balloon-in 0.2s var(--ease); }
+.balloon .clip-y, .balloon .surface { border-radius: 22px; transform: none; transition: none; }
+.balloon .tab { display: none; }
+.balloon .panel { opacity: 1; transform: none; transition: none; }
+.balloon .panel-inner { padding-right: 16px; }
+
 /* ---- tab (medidores) ---- */
 .tab {
   width: var(--tab-w);

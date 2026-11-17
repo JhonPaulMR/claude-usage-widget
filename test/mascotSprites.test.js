@@ -22,10 +22,18 @@ test('todo quadro tem 16 x 15 e só usa caracteres da legenda', () => {
   }
 });
 
-test('poses animadas têm dois quadros diferentes', () => {
-  for (const name of ['andando', 'falando']) {
-    assert.equal(MASCOT_POSES[name].length, 2);
-    assert.notDeepEqual(MASCOT_POSES[name][0], MASCOT_POSES[name][1]);
+test('poses animadas: andar tem quatro quadros, falar tem dois', () => {
+  assert.equal(MASCOT_POSES.andando.length, 4);
+  assert.equal(MASCOT_POSES.falando.length, 2);
+  for (const name of ['andando', 'falando']) assert.notDeepEqual(MASCOT_POSES[name][0], MASCOT_POSES[name][1]);
+});
+
+test('o mascote não tem boca: pixel escuro só na altura dos olhos', () => {
+  for (const [name, frames] of Object.entries(MASCOT_POSES)) {
+    const eyeRows = name === 'morto' ? [10, 11, 12] : [5, 6, 7, 8, 9];
+    frames.forEach((frame, i) => frame.forEach((row, y) => {
+      if (row.includes('k')) assert.ok(eyeRows.includes(y), `${name}[${i}] linha ${y}`);
+    }));
   }
 });
 

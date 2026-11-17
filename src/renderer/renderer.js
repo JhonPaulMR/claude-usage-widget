@@ -12,8 +12,14 @@ const els = {
 
 let usage = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null, forecast: null, intervalSec: 60 };
 let prefs = { theme: 'dark', chartMode: 'separate', chartRange: '5h', compact: { session: true, weekly: true, forecast: false, reset: false, chart: false } };
-let open = false;
-let pinned = false;
+// A mesma página serve de balão do mascote (?balloon=1): painel sempre aberto, sem a aba.
+const BALLOON = new URLSearchParams(location.search).has('balloon');
+let open = BALLOON;
+let pinned = BALLOON;
+if (BALLOON) {
+  document.body.classList.add('balloon');
+  els.widget.classList.add('open');
+}
 let leaveTimer = null;
 
 // ---------- medidores (aba recolhida) ----------
@@ -226,7 +232,9 @@ function setIgnore(v) {
 }
 function syncHeight() {
   fullW = els.widget.offsetWidth;
-  fullH = els.widget.offsetHeight;
+  const height = els.widget.offsetHeight;
+  if (height !== fullH) window.widget.contentHeight(height);
+  fullH = height;
   const h = els.tab.offsetHeight;
   if (h !== tabH) window.widget.tabHeight(h);
   tabH = h;
@@ -244,8 +252,14 @@ function hit(x, y) {
   if (open) return x >= window.innerWidth - fullW && y <= fullH;
   return x >= window.innerWidth - TAB_W && y <= tabH;
 }
+let balloonInside = false;
 function onPointer(x, y) {
   const inside = hit(x, y);
+  if (BALLOON) {
+    setIgnore(!inside);
+    if (inside !== balloonInside) { balloonInside = inside; window.widget.balloonHover(inside); }
+    return;
+  }
   setIgnore(!inside && !dragging);
   if (inside) expand();
   else if (open && !pinned) {
@@ -257,6 +271,10 @@ window.addEventListener('mousemove', (e) => onPointer(e.clientX, e.clientY));
 document.addEventListener('mouseleave', () => {
   if (dragging) return;
   setIgnore(true);
+  if (BALLOON) {
+    if (balloonInside) { balloonInside = false; window.widget.balloonHover(false); }
+    return;
+  }
   if (open && !pinned) { clearTimeout(leaveTimer); leaveTimer = setTimeout(collapse, 350); }
 });
 
