@@ -11,7 +11,7 @@ Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já 
 | 3 | Histórico e previsão | Implementada, aguardando teste do usuário | `etapa-3-historico` |
 | 4 | Gráficos e tela de configurações | Implementada, aguardando teste do usuário | `etapa-4-graficos-config` |
 | 5 | Multi-monitor | Implementada, aguardando teste do usuário | `etapa-5-multi-monitor` |
-| 6 | Mascote | A fazer | |
+| 6 | Mascote | Folha de poses pronta, aguardando aprovação | `etapa-6-mascote` |
 
 **Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-5-multi-monitor`, que contém as etapas 1 a 4), usar por alguns dias e conferir "Como testar" das etapas 1, 3, 4 e 5. A etapa 6 começa pela folha de poses, que precisa de aprovação.
 
@@ -229,7 +229,16 @@ Painel com gráficos (443 px de altura): em 5 medições, 4 sem nenhum quadro ac
 4. Desligar o cabo do segundo monitor e ligar de novo: o widget some dele e volta no mesmo lugar.
 5. Se os monitores tiverem escalas diferentes, conferir se o widget fica colado na borda direita nos dois.
 
-## Etapa 6: mascote
+## Etapa 6: mascote (em andamento)
+
+### Feito até agora
+
+- `src/shared/mascotSprites.js`: nove poses em matrizes de 16 × 15 pixels (neutro, feliz, cansado, preocupado, confuso, morto, andando, caindo, falando). A forma base segue o mascote do Claude Code: corpo largo, olhos verticais de 1 pixel, um braço de cada lado e quatro pernas.
+- `docs/mascote-poses.png`: folha de poses para aprovação, gerada por `npm run mascot:sheet` (página em `scripts/mascot/`, fora do instalador).
+- Nada do mascote aparece no widget ainda. O modo mascote, o passeio, a gravidade e as falas só começam depois da aprovação das poses.
+
+### Decisão
+
 
 - Modos exclusivos, **clássico** (padrão) e **mascote**, trocados nas configurações e no menu. No modo mascote as abas clássicas somem; ao voltar, cada monitor retoma a posição salva.
 - **Aparência:** fiel ao mascote do Claude Code, apenas para uso pessoal e interno, sem distribuição. Sprites desenhados como matrizes de pixels no código (como o `logo.js`), sem baixar nada. Primeiro entregável: folha com todas as poses para aprovação.

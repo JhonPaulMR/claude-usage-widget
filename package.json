@@ -9,6 +9,7 @@
     "demo": "electron . --demo",
     "probe": "node scripts/probe.js",
     "icons": "node scripts/make-icons.js",
+    "mascot:sheet": "electron scripts/mascot/shot.js",
     "test": "node --test \"test/*.test.js\"",
     "dist": "npm run icons && electron-builder --win nsis"
   },
