@@ -89,12 +89,12 @@
           <option value="light">Claro</option>
         </select>
       </label>
-      <label class="field">
-        <span>Monitor</span>
-        <select data-key="displayId" data-type="display" id="displays"></select>
-      </label>
+      <div class="group">
+        <span>Monitores<small>O widget aparece em todos os marcados; cada um guarda a sua posição.</small></span>
+        <div id="displays"></div>
+      </div>
       <div class="field">
-        <span>Posição do widget</span>
+        <span>Posição do widget<small>Vale para todos os monitores.</small></span>
         <button type="button" data-action="center">Centralizar verticalmente</button>
       </div>
       <label class="check"><input type="checkbox" data-key="autostart" id="autostart" /><span>Iniciar com o Windows<small id="autostartHint" hidden>Só vale na versão instalada.</small></span></label>

@@ -1,8 +1,8 @@
-const { app, Tray, Menu, Notification, globalShortcut, powerMonitor, ipcMain, screen, nativeImage } = require('electron');
+const { app, Tray, Menu, Notification, globalShortcut, powerMonitor, ipcMain, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createStore } = require('./store');
-const { createWidgetWindow } = require('./window');
+const { createWidgetManager } = require('./window');
 const { fetchUsage, fetchDemo, readExpiry, CRED_PATH } = require('./usageProvider');
 const { nextBackoffSec, nextDelaySec } = require('./schedule');
 const { createTokenRefresher } = require('./tokenRefresher');
@@ -21,7 +21,7 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-let store, widget, tray, settingsWin, pollTimer, backoffSec = 0;
+let store, widgets, tray, settingsWin, pollTimer, backoffSec = 0;
 let history, demoHistory; // pontos reais (arquivo) e pontos da demonstração (só memória)
 let payload = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
 let fetching = false;
@@ -54,7 +54,7 @@ function prefsPayload() {
 }
 
 function pushPrefs() {
-  if (widget && !widget.win.isDestroyed()) widget.win.webContents.send('prefs', prefsPayload());
+  if (widgets) widgets.broadcast('prefs', prefsPayload());
 }
 
 function activeHistory() {
@@ -73,7 +73,7 @@ function withForecast(p) {
 }
 
 function push() {
-  if (widget && !widget.win.isDestroyed()) widget.win.webContents.send('usage', payload);
+  if (widgets) widgets.broadcast('usage', payload);
 }
 
 // Agenda a próxima consulta e registra quando ela será (a interface mostra a contagem).
@@ -182,13 +182,9 @@ function rebuildMenu() {
 }
 
 function settingsState() {
-  const primaryId = screen.getPrimaryDisplay().id;
   return {
     prefs: prefs.pick(store.get),
-    displays: screen.getAllDisplays().map((d, i) => ({
-      id: d.id === primaryId ? null : d.id,
-      label: `Monitor ${i + 1}${d.id === primaryId ? ' (principal)' : ''} · ${d.size.width}×${d.size.height}`,
-    })),
+    displays: widgets.list(),
     renewal: renewalLabel(),
     forcedDemo: FORCE_DEMO,
     packaged: app.isPackaged,
@@ -227,8 +223,6 @@ function applyPref(key, value) {
     applyAutostart();
   } else if (key === 'demo') {
     refresh();
-  } else if (key === 'displayId') {
-    widget.place();
   }
   rebuildMenu();
 }
@@ -241,8 +235,7 @@ function applyAutostart() {
 function toggleVisible() {
   const show = !store.get('visible');
   store.set('visible', show);
-  if (show) widget.win.showInactive();
-  else widget.win.hide();
+  widgets.setVisible(show);
   rebuildMenu();
 }
 
@@ -256,29 +249,27 @@ app.whenReady().then(() => {
   history = createHistory(app.getPath('userData'), { seed: store.get('history') || [] });
   demoHistory = createHistory(app.getPath('userData'), { persist: false });
   if (store.get('history')) store.set('history', undefined); // migrado para history.jsonl
-  widget = createWidgetWindow(store);
-  widget.win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  widgets = createWidgetManager(store, { onChange: rebuildMenu });
+  widgets.sync();
 
   const last = store.get('last');
   if (last && !isDemo()) payload = withForecast({ state: 'loading', data: last.data, fetchedAt: last.fetchedAt, message: '' });
 
   if (process.argv.includes('--perf')) {
-    widget.win.webContents.once('did-finish-load', async () => {
+    const perfWin = widgets.first().win;
+    perfWin.webContents.once('did-finish-load', async () => {
       await new Promise((r) => setTimeout(r, 1500));
       console.log('PERF gpu', JSON.stringify(app.getGPUFeatureStatus()));
-      console.log('PERF height', await widget.win.webContents.executeJavaScript('document.getElementById("widget").offsetHeight'));
-      for (const nofx of [false, false, false, true, true, true]) console.log('PERF', nofx ? 'nofx' : 'fx  ', JSON.stringify(await widget.win.webContents.executeJavaScript(`__perf(${nofx})`)));
+      console.log('PERF height', await perfWin.webContents.executeJavaScript('document.getElementById("widget").offsetHeight'));
+      for (const nofx of [false, false, false, true, true, true]) console.log('PERF', nofx ? 'nofx' : 'fx  ', JSON.stringify(await perfWin.webContents.executeJavaScript(`__perf(${nofx})`)));
       app.quit();
     });
   }
-  widget.win.webContents.once('did-finish-load', () => {
-    widget.place();
-    if (store.get('visible')) widget.win.showInactive();
-  });
-
-  ipcMain.on('ready', () => {
-    pushPrefs();
-    push();
+  // Cada janela do widget avisa quando carregou e recebe o estado atual.
+  ipcMain.on('ready', (e) => {
+    if (!widgets.bySender(e.sender)) return;
+    e.sender.send('prefs', prefsPayload());
+    e.sender.send('usage', payload);
   });
   // A janela de configurações é a única que pode ler e gravar preferências.
   const fromSettings = (e) => settingsWin && !settingsWin.isDestroyed() && e.sender === settingsWin.webContents;
@@ -286,16 +277,19 @@ app.whenReady().then(() => {
   ipcMain.on('settings:set', (e, key, value) => { if (fromSettings(e)) applyPref(key, value); });
   ipcMain.on('settings:action', (e, name) => {
     if (!fromSettings(e)) return;
-    if (name === 'center') widget.resetPosition();
+    if (name === 'center') widgets.resetPositions();
     if (name === 'refresh') refresh();
   });
-  for (const ev of ['display-added', 'display-removed']) screen.on(ev, rebuildMenu);
+  ipcMain.on('settings:display', (e, id, enabled) => { if (fromSettings(e)) widgets.setEnabled(id, !!enabled); });
   ipcMain.on('refresh', refresh);
-  ipcMain.on('set-ignore', (_e, ignore) => widget.setIgnoreMouse(ignore));
-  ipcMain.on('drag-start', () => widget.dragStart());
-  ipcMain.on('drag-move', (_e, dy) => widget.dragMove(dy));
-  ipcMain.on('tab-height', (_e, h) => widget.setTabHeight(h));
-  ipcMain.on('context-menu', () => buildMenu().popup({ window: widget.win }));
+  ipcMain.on('set-ignore', (e, ignore) => widgets.setIgnoreMouse(e.sender, ignore));
+  ipcMain.on('drag-start', (e) => widgets.dragStart(e.sender));
+  ipcMain.on('drag-move', (e, dy) => widgets.dragMove(e.sender, dy));
+  ipcMain.on('tab-height', (_e, h) => widgets.setTabHeight(h));
+  ipcMain.on('context-menu', (e) => {
+    const entry = widgets.bySender(e.sender);
+    if (entry) buildMenu().popup({ window: entry.win });
+  });
 
   const trayIcon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'build', 'tray.png'));
   tray = new Tray(trayIcon.isEmpty() ? nativeImage.createEmpty() : trayIcon);

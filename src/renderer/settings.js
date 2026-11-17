@@ -5,14 +5,12 @@ let state = null;
 
 function readValue(el) {
   if (el.type === 'checkbox') return el.checked;
-  if (el.dataset.type === 'display') return el.value === '' ? null : Number(el.value);
   if (el.dataset.type === 'number') return Number(el.value);
   return el.value;
 }
 
 function writeValue(el, value) {
   if (el.type === 'checkbox') el.checked = !!value;
-  else if (el.dataset.type === 'display') el.value = value == null ? '' : String(value);
   else if (document.activeElement !== el) el.value = String(value); // não atropela quem está digitando
 }
 
@@ -30,11 +28,19 @@ function apply(next) {
   document.body.dataset.theme = state.prefs.theme || 'dark';
 
   const displays = document.getElementById('displays');
+  const lastOn = state.displays.filter((d) => d.enabled).length === 1;
   displays.replaceChildren(...state.displays.map((d) => {
-    const opt = document.createElement('option');
-    opt.value = d.id == null ? '' : String(d.id);
-    opt.textContent = d.label;
-    return opt;
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = d.enabled;
+    box.disabled = d.enabled && lastOn; // o widget precisa de pelo menos um monitor
+    box.addEventListener('change', () => settings.display(d.id, box.checked));
+    const text = document.createElement('span');
+    text.textContent = d.label;
+    label.append(box, text);
+    return label;
   }));
 
   for (const el of controls) {

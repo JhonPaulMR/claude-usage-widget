@@ -33,7 +33,6 @@ const RULES = {
   theme: oneOf(['dark', 'light']),
   autostart: bool,
   demo: bool,
-  displayId: (v) => (v === null || Number.isFinite(v) ? v : undefined),
 };
 
 // Devolve { ok, value }. ok=false: chave desconhecida ou valor inválido.

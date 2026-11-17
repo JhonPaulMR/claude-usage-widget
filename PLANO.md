@@ -10,19 +10,19 @@ Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já 
 | 2 | Animação de abrir e fechar | Testada pelo usuário no notebook (fluida) | `etapa-2-animacao` |
 | 3 | Histórico e previsão | Implementada, aguardando teste do usuário | `etapa-3-historico` |
 | 4 | Gráficos e tela de configurações | Implementada, aguardando teste do usuário | `etapa-4-graficos-config` |
-| 5 | Multi-monitor | A fazer | |
+| 5 | Multi-monitor | Implementada, aguardando teste do usuário | `etapa-5-multi-monitor` |
 | 6 | Mascote | A fazer | |
 
-**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-4-graficos-config`, que contém as etapas 1 a 3), usar por alguns dias e conferir "Como testar" das etapas 1, 3 e 4. Só depois começar a etapa 5.
+**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-5-multi-monitor`, que contém as etapas 1 a 4), usar por alguns dias e conferir "Como testar" das etapas 1, 3, 4 e 5. A etapa 6 começa pela folha de poses, que precisa de aprovação.
 
-Cada branch parte da anterior (`etapa-1-atualizacao` → `etapa-2-animacao` → `etapa-3-historico` → `etapa-4-graficos-config`), porque as etapas foram iniciadas a pedido do usuário antes do teste de um dia da etapa 1. Nada foi mesclado na `main`.
+Cada branch parte da anterior (`etapa-1-atualizacao` → `etapa-2-animacao` → `etapa-3-historico` → `etapa-4-graficos-config` → `etapa-5-multi-monitor`), porque as etapas foram iniciadas a pedido do usuário antes do teste de um dia da etapa 1. Nada foi mesclado na `main`.
 
 ### Para continuar em outro PC
 
 ```bash
 git clone https://github.com/JhonPaulMR/claude-usage-widget.git
 cd claude-usage-widget
-git checkout etapa-4-graficos-config
+git checkout etapa-5-multi-monitor
 npm install
 npm test
 npm run dist
@@ -196,11 +196,38 @@ Painel com gráficos (443 px de altura): em 5 medições, 4 sem nenhum quadro ac
 6. Depois de algumas horas de uso, ver se os gráficos e a linha pontilhada fazem sentido.
 7. Passar o mouse na aba logo após iniciar: a abertura deve continuar fluida com os gráficos.
 
-## Etapa 5: multi-monitor
+## Etapa 5: multi-monitor (feita)
 
 - Lista de monitores com caixas de seleção; o widget aparece em todos os marcados.
 - Posição salva por monitor; todos mostram os mesmos dados; abrir ou fechar em um não afeta os outros.
 - Observação técnica: hoje `top` é um valor absoluto da tela virtual, e precisa virar relativo a cada monitor.
+
+### O que mudou
+
+- `src/main/displays.js` (novo): regras puras. Preferência `displays` no formato `{ [idDoMonitor]: { enabled, top } }`, com `top` relativo à área útil do monitor.
+- `src/main/window.js`: virou um gerenciador com uma janela por monitor marcado. Cria e fecha janelas quando um monitor é ligado, desligado ou (des)marcado. Cada mensagem da interface (hover, arrastar, menu) vale só para a janela que a enviou.
+- Migração: `displayId` e `top` antigos viram a preferência nova na primeira execução, mantendo a posição.
+- Configurações: a lista suspensa de monitor virou uma lista com caixas de seleção. A última caixa marcada fica travada, para o widget nunca sumir.
+- "Centralizar verticalmente" vale para todos os monitores.
+- `electron . --split-display` divide o monitor principal em dois falsos (desenvolvimento).
+
+### Decisões tomadas na implementação (não estavam no plano)
+
+- **Monitor marcado que foi desligado:** se nenhum dos marcados está ligado, o widget aparece no principal, sem alterar a preferência. Quando o monitor volta, o widget volta para ele na posição salva.
+- **Monitor novo:** começa desmarcado.
+- **Fixar o painel (clique na aba)** também é por monitor.
+
+### Ainda não verificado
+
+- **Dois monitores de verdade.** O PC de desenvolvimento tem uma tela só. O teste foi com `--split-display`, que confere a lógica (janelas independentes, posição por monitor, marcar e desmarcar), mas não monitores com escalas diferentes (125%, 150%), nem o comportamento ao ligar e desligar um cabo com o widget rodando.
+
+### Como testar a etapa 5
+
+1. Com dois monitores, abrir Configurações e marcar o segundo: o widget aparece nos dois.
+2. Abrir o painel em um: o outro continua recolhido. Arrastar um: o outro não se mexe.
+3. Fechar e abrir o widget: cada monitor retoma a sua posição.
+4. Desligar o cabo do segundo monitor e ligar de novo: o widget some dele e volta no mesmo lugar.
+5. Se os monitores tiverem escalas diferentes, conferir se o widget fica colado na borda direita nos dois.
 
 ## Etapa 6: mascote
 

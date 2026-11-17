@@ -14,12 +14,10 @@ test('sanitize: aceita valores válidos e recusa o resto', () => {
   assert.deepEqual(sanitize('alertLow', '75'), { ok: true, value: 75 });
   assert.equal(sanitize('alertLow', 0).ok, false);
   assert.equal(sanitize('alertHigh', 100).ok, false);
-  assert.deepEqual(sanitize('displayId', null), { ok: true, value: null });
-  assert.equal(sanitize('displayId', 'x').ok, false);
 });
 
 test('sanitize: chave fora da lista é recusada (a janela não grava o que quiser)', () => {
-  for (const key of ['last', 'top', 'visible', 'autostartInit', '__proto__', 'constructor', 'toString']) {
+  for (const key of ['last', 'top', 'displays', 'displayId', 'visible', 'autostartInit', '__proto__', 'constructor', 'toString']) {
     assert.equal(sanitize(key, true).ok, false, key);
   }
 });

@@ -13,8 +13,7 @@ const DEFAULTS = {
   autostartInit: false, // true depois de aplicar o padrão da primeira execução instalada
   visible: true,
   theme: 'dark',
-  top: null, // posição vertical (px, relativa à tela); null = centralizado
-  displayId: null,
+  displays: null, // { [idDoMonitor]: { enabled, top } }; top relativo à área útil do monitor (null = centralizado)
   demo: false,
   chartMode: 'separate', // separate | combined | session | weekly
   chartRange: '5h', // janela visível no modo combinado: 1h | 5h | 24h | 7d
