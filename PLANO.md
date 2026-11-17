@@ -296,10 +296,10 @@ Todo movimento do corpo é animação CSS de `transform`, que roda no compositor
 6. Abrir um vídeo em tela cheia por alguns minutos: ele não deve andar por cima.
 7. Trocar para **Fixo** e soltar no meio da tela: fica onde foi solto.
 8. Baixar um limiar de alerta para logo acima do uso atual: o aviso vira fala.
+9. Desmarcar **Modo mascote**: as abas voltam onde estavam.
 10. Apertar `Ctrl+Alt+M` com o mouse longe dele: ele corre até embaixo do ponteiro.
 11. Botão direito nele → **Reação**: fixar uma, mostrar outra por 30 segundos e voltar para automática.
 12. Observar por alguns minutos: ao piscar, os olhos fecham mas não somem.
-9. Desmarcar **Modo mascote**: as abas voltam onde estavam.
 
 ### Decisão
 
