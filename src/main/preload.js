@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('widget', {
   setIgnore: (ignore) => ipcRenderer.send('set-ignore', ignore),
   dragStart: () => ipcRenderer.send('drag-start'),
   dragMove: (deltaY) => ipcRenderer.send('drag-move', deltaY),
+  tabHeight: (h) => ipcRenderer.send('tab-height', h),
   contextMenu: () => ipcRenderer.send('context-menu'),
 });

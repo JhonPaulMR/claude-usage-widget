@@ -1,7 +1,6 @@
 :root {
   --panel-w: 236px;
   --tab-w: 72px;
-  --tab-h: 220px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   --bg-1: #17171a;
@@ -16,6 +15,7 @@
   --red: #f87171;
   --grey: #6b6b72;
   --claude: #d97757;
+  --blue: #60a5fa;
 }
 body[data-theme='light'] {
   --bg-1: #ffffff;
@@ -28,9 +28,11 @@ body[data-theme='light'] {
   --green: #059669;
   --amber: #d97706;
   --red: #dc2626;
+  --blue: #2563eb;
 }
 
 * { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
 html, body { background: transparent; overflow: hidden; height: 100%; user-select: none; }
 body { font: 13px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; color: var(--fg); }
 
@@ -43,7 +45,6 @@ body { font: 13px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-ser
   top: 0;
   right: 0;
   width: calc(var(--panel-w) + var(--tab-w));
-  min-height: var(--tab-h);
   overflow: hidden;
   border-radius: 22px 0 0 22px;
   transform: translateX(var(--panel-w));
@@ -55,7 +56,6 @@ body { font: 13px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-ser
 }
 .surface {
   display: flex;
-  min-height: var(--tab-h);
   background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
   box-shadow: inset 0 0 0 1px var(--line);
   border-radius: 22px 0 0 22px;
@@ -68,7 +68,8 @@ body { font: 13px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-ser
 /* ---- tab (medidores) ---- */
 .tab {
   width: var(--tab-w);
-  height: var(--tab-h);
+  padding: 30px 0; /* altura pelo conteúdo: 220 px com os dois medidores e nenhum item extra */
+  align-self: flex-start;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -98,6 +99,9 @@ body { font: 13px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-ser
   transition: stroke-dashoffset 1s var(--ease), stroke 0.4s;
 }
 .ring-logo { fill: var(--claude); transition: fill .4s; }
+.gauge-reset, .gauge-fc { font-size: 9.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.gauge-fc.warn { color: var(--amber); }
+.gauge-spark { width: 56px; height: 16px; margin-top: 2px; overflow: visible; }
 .gauge-pct { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg); }
 
 .c-green { stroke: var(--green); }
@@ -145,6 +149,24 @@ body { font: 13px/1.35 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-ser
 .bar > i.b-amber { background: linear-gradient(90deg, #f59e0b, var(--amber)); }
 .bar > i.b-red { background: linear-gradient(90deg, #ef4444, var(--red)); }
 .stale .bar > i { background: var(--grey); }
+/* ---- gráficos ---- */
+.spark { display: block; width: 100%; height: 36px; margin: 0 0 8px; overflow: visible; }
+.spark-line, .spark-proj { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.spark-proj { stroke-dasharray: 2 4; opacity: 0.75; }
+.spark-area { stroke: none; opacity: 0.14; }
+.s-session .spark-line, .s-session .spark-proj, .gauge-spark.s-session .spark-line { stroke: var(--claude); }
+.s-weekly .spark-line, .s-weekly .spark-proj, .gauge-spark.s-weekly .spark-line { stroke: var(--blue); }
+.s-session .spark-area { fill: var(--claude); }
+.s-weekly .spark-area { fill: var(--blue); }
+.stale .spark-line, .stale .spark-proj { stroke: var(--grey); }
+.stale .spark-area { fill: var(--grey); }
+.chart-card .spark { height: 48px; margin: 6px 0 0; }
+.legend { display: flex; gap: 10px; align-items: center; font-size: 10.5px; color: var(--muted); }
+.legend .key::before { content: ''; display: inline-block; width: 10px; height: 2px; border-radius: 1px; margin-right: 5px; vertical-align: middle; }
+.legend .key.s-session::before { background: var(--claude); }
+.legend .key.s-weekly::before { background: var(--blue); }
+.legend .range { margin-left: auto; }
+
 .sub { color: var(--muted); font-size: 11.5px; }
 .sub b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
 .pace { margin-top: 2px; }

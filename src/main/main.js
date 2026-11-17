@@ -9,9 +9,11 @@ const { createTokenRefresher } = require('./tokenRefresher');
 const { createAlerter } = require('./alerts');
 const { createHistory } = require('./history');
 const { forecastAll } = require('./forecast');
+const { buildCharts } = require('./chart');
+const prefs = require('./prefs');
+const { createSettingsWindow } = require('./settingsWindow');
 
 const FORCE_DEMO = process.argv.includes('--demo');
-const INTERVALS = [30, 60, 120, 180, 300];
 const SHORTCUT = 'Control+Alt+U';
 
 if (!app.requestSingleInstanceLock()) {
@@ -19,11 +21,11 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-let store, widget, tray, pollTimer, backoffSec = 0;
+let store, widget, tray, settingsWin, pollTimer, backoffSec = 0;
 let history, demoHistory; // pontos reais (arquivo) e pontos da demonstração (só memória)
 let payload = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
 let fetching = false;
-let lastRenewal = null; // resultado da última tentativa de renovar o token (aparece no menu)
+let lastRenewal = null; // resultado da última tentativa de renovar o token (aparece nas configurações)
 
 const tokenRefresher = createTokenRefresher({ readExpiry, log: (r) => { lastRenewal = { ...r, at: Date.now() }; } });
 
@@ -35,17 +37,37 @@ function isDemo() {
   return FORCE_DEMO || store.get('demo');
 }
 
+// O que a janela do widget precisa saber das preferências.
 function prefsPayload() {
-  return { theme: store.get('theme') };
+  return {
+    theme: store.get('theme'),
+    chartMode: store.get('chartMode'),
+    chartRange: store.get('chartRange'),
+    compact: {
+      session: store.get('compactSession'),
+      weekly: store.get('compactWeekly'),
+      forecast: store.get('compactForecast'),
+      reset: store.get('compactReset'),
+      chart: store.get('compactChart'),
+    },
+  };
+}
+
+function pushPrefs() {
+  if (widget && !widget.win.isDestroyed()) widget.win.webContents.send('prefs', prefsPayload());
 }
 
 function activeHistory() {
   return isDemo() ? demoHistory : history;
 }
 
-// Previsão calculada sobre o último dado conhecido; a interface marca como desatualizada se ele envelhecer.
+// Previsão e gráficos calculados sobre o último dado conhecido; a interface marca a previsão como
+// desatualizada se ele envelhecer.
 function withForecast(p) {
-  p.forecast = forecastAll(p.data, activeHistory().all());
+  const rows = activeHistory().all();
+  const now = Date.now();
+  p.forecast = forecastAll(p.data, rows, now);
+  p.charts = buildCharts(p.data, rows, now, { mode: store.get('chartMode'), rangeMs: prefs.CHART_RANGES[store.get('chartRange')] });
   p.intervalSec = store.get('intervalSec');
   return p;
 }
@@ -96,10 +118,7 @@ async function refresh() {
     activeHistory().add(fetchedAt, data);
     payload = withForecast({ state: 'ok', data, fetchedAt, message: '' });
     if (!isDemo()) store.set('last', { data, fetchedAt });
-    const thresholds = [];
-    if (store.get('alert80')) thresholds.push(80);
-    if (store.get('alert90')) thresholds.push(90);
-    alerter(data, thresholds, { forecast: store.get('alertForecast') ? payload.forecast : null, now: fetchedAt });
+    alerter(data, prefs.alertThresholds(store.get), { forecast: store.get('alertForecast') ? payload.forecast : null, now: fetchedAt });
   } catch (e) {
     const kind = e.kind || 'network';
     if (kind === 'ratelimit') backoffSec = nextBackoffSec(backoffSec, store.get('intervalSec'), e.retryAfterSec);
@@ -123,81 +142,16 @@ async function refresh() {
   }
 }
 
+// Menu da bandeja e do botão direito: só o essencial. O resto está na janela de configurações.
 function buildMenu() {
-  const displays = screen.getAllDisplays();
-  const primaryId = screen.getPrimaryDisplay().id;
-  const currentId = store.get('displayId') ?? primaryId;
   return Menu.buildFromTemplate([
     { label: 'Atualizar agora', click: refresh },
-    {
-      label: 'Intervalo de atualização',
-      submenu: INTERVALS.map((s) => ({
-        label: s < 60 ? `${s} segundos` : `${s / 60} min`,
-        type: 'radio',
-        checked: store.get('intervalSec') === s,
-        click: () => { store.set('intervalSec', s); backoffSec = 0; schedule(); },
-      })),
-    },
-    { type: 'separator' },
     {
       label: store.get('visible') ? 'Ocultar widget' : 'Mostrar widget',
       accelerator: SHORTCUT,
       click: toggleVisible,
     },
-    {
-      label: 'Alertas',
-      submenu: [
-        { label: 'Avisar em 80%', type: 'checkbox', checked: store.get('alert80'), click: (i) => store.set('alert80', i.checked) },
-        { label: 'Avisar em 90%', type: 'checkbox', checked: store.get('alert90'), click: (i) => store.set('alert90', i.checked) },
-        { label: 'Avisar quando a previsão for menor que 15 min', type: 'checkbox', checked: store.get('alertForecast'), click: (i) => store.set('alertForecast', i.checked) },
-      ],
-    },
-    {
-      label: 'Tema',
-      submenu: ['dark', 'light'].map((t) => ({
-        label: t === 'dark' ? 'Escuro' : 'Claro',
-        type: 'radio',
-        checked: store.get('theme') === t,
-        click: () => { store.set('theme', t); widget.win.webContents.send('prefs', prefsPayload()); },
-      })),
-    },
-    {
-      label: 'Monitor',
-      submenu: [
-        ...displays.map((d, i) => ({
-          label: `Monitor ${i + 1}${d.id === primaryId ? ' (principal)' : ''} — ${d.size.width}×${d.size.height}`,
-          type: 'radio',
-          checked: d.id === currentId,
-          click: () => { store.set('displayId', d.id === primaryId ? null : d.id); widget.place(); },
-        })),
-        { type: 'separator' },
-        { label: 'Centralizar verticalmente', click: () => widget.resetPosition() },
-      ],
-    },
-    {
-      label: 'Token e consumo',
-      submenu: [
-        { label: 'Renovar token automaticamente', type: 'checkbox', checked: store.get('autoRenew'), click: (i) => { store.set('autoRenew', i.checked); rebuildMenu(); } },
-        { label: 'Permitir renovação com requisição mínima (gasta um pouco de uso)', type: 'checkbox', checked: store.get('autoRenewPaid'), enabled: store.get('autoRenew'), click: (i) => store.set('autoRenewPaid', i.checked) },
-        { label: 'Plano B se o formato mudar (gasta um pouco de uso)', type: 'checkbox', checked: store.get('paidFallback'), click: (i) => store.set('paidFallback', i.checked) },
-        { type: 'separator' },
-        { label: renewalLabel(), enabled: false },
-      ],
-    },
-    { type: 'separator' },
-    {
-      label: 'Iniciar com o Windows',
-      type: 'checkbox',
-      checked: store.get('autostart'),
-      click: (i) => { store.set('autostart', i.checked); applyAutostart(); },
-    },
-    {
-      label: 'Dados de demonstração',
-      type: 'checkbox',
-      checked: !!isDemo(),
-      enabled: !FORCE_DEMO,
-      click: (i) => { store.set('demo', i.checked); refresh(); },
-    },
+    { label: 'Configurações…', click: openSettings },
     { type: 'separator' },
     { label: 'Sair', click: () => app.quit() },
   ]);
@@ -221,8 +175,62 @@ function renewalLabel() {
   return `Renovação falhou às ${when}: ${why}`;
 }
 
+// Atualiza o que mostra estado fora do widget: menu da bandeja e janela de configurações.
 function rebuildMenu() {
   if (tray) tray.setContextMenu(buildMenu());
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('settings:state', settingsState());
+}
+
+function settingsState() {
+  const primaryId = screen.getPrimaryDisplay().id;
+  return {
+    prefs: prefs.pick(store.get),
+    displays: screen.getAllDisplays().map((d, i) => ({
+      id: d.id === primaryId ? null : d.id,
+      label: `Monitor ${i + 1}${d.id === primaryId ? ' (principal)' : ''} · ${d.size.width}×${d.size.height}`,
+    })),
+    renewal: renewalLabel(),
+    forcedDemo: FORCE_DEMO,
+    packaged: app.isPackaged,
+    version: app.getVersion(),
+    shortcut: 'Ctrl+Alt+U',
+  };
+}
+
+function openSettings() {
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.show();
+    settingsWin.focus();
+    return;
+  }
+  settingsWin = createSettingsWindow(store.get('theme'));
+  settingsWin.on('closed', () => { settingsWin = null; });
+}
+
+// Grava uma preferência vinda da janela de configurações e aplica o efeito dela.
+function applyPref(key, value) {
+  const r = prefs.sanitize(key, value);
+  if (!r.ok) return;
+  store.set(key, r.value);
+  if (key === 'intervalSec') {
+    backoffSec = 0;
+    payload.intervalSec = r.value;
+    schedule();
+    push();
+  } else if (key === 'chartMode' || key === 'chartRange') {
+    payload = withForecast(payload);
+    pushPrefs();
+    push();
+  } else if (key === 'theme' || key.startsWith('compact')) {
+    pushPrefs();
+  } else if (key === 'autostart') {
+    applyAutostart();
+  } else if (key === 'demo') {
+    refresh();
+  } else if (key === 'displayId') {
+    widget.place();
+  }
+  rebuildMenu();
 }
 
 function applyAutostart() {
@@ -244,6 +252,7 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   store = createStore(app.getPath('userData'));
+  for (const [k, v] of Object.entries(prefs.migrate(store.all()))) store.set(k, v);
   history = createHistory(app.getPath('userData'), { seed: store.get('history') || [] });
   demoHistory = createHistory(app.getPath('userData'), { persist: false });
   if (store.get('history')) store.set('history', undefined); // migrado para history.jsonl
@@ -268,13 +277,24 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('ready', () => {
-    widget.win.webContents.send('prefs', prefsPayload());
+    pushPrefs();
     push();
   });
+  // A janela de configurações é a única que pode ler e gravar preferências.
+  const fromSettings = (e) => settingsWin && !settingsWin.isDestroyed() && e.sender === settingsWin.webContents;
+  ipcMain.handle('settings:get', (e) => (fromSettings(e) ? settingsState() : null));
+  ipcMain.on('settings:set', (e, key, value) => { if (fromSettings(e)) applyPref(key, value); });
+  ipcMain.on('settings:action', (e, name) => {
+    if (!fromSettings(e)) return;
+    if (name === 'center') widget.resetPosition();
+    if (name === 'refresh') refresh();
+  });
+  for (const ev of ['display-added', 'display-removed']) screen.on(ev, rebuildMenu);
   ipcMain.on('refresh', refresh);
   ipcMain.on('set-ignore', (_e, ignore) => widget.setIgnoreMouse(ignore));
   ipcMain.on('drag-start', () => widget.dragStart());
   ipcMain.on('drag-move', (_e, dy) => widget.dragMove(dy));
+  ipcMain.on('tab-height', (_e, h) => widget.setTabHeight(h));
   ipcMain.on('context-menu', () => buildMenu().popup({ window: widget.win }));
 
   const trayIcon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'build', 'tray.png'));
@@ -293,6 +313,7 @@ app.whenReady().then(() => {
     store.set('autostart', true);
   }
   applyAutostart();
+  if (process.argv.includes('--settings')) openSettings(); // atalho de desenvolvimento
   watchCredentials();
   refresh();
 });

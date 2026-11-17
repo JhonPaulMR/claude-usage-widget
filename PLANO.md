@@ -9,20 +9,20 @@ Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já 
 | 1 | Atualização (429, 5xx, token) | Implementada, aguardando teste do usuário | `etapa-1-atualizacao` |
 | 2 | Animação de abrir e fechar | Testada pelo usuário no notebook (fluida) | `etapa-2-animacao` |
 | 3 | Histórico e previsão | Implementada, aguardando teste do usuário | `etapa-3-historico` |
-| 4 | Gráficos e tela de configurações | A fazer | |
+| 4 | Gráficos e tela de configurações | Implementada, aguardando teste do usuário | `etapa-4-graficos-config` |
 | 5 | Multi-monitor | A fazer | |
 | 6 | Mascote | A fazer | |
 
-**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-3-historico`, que contém as etapas 1 e 2), usar por alguns dias e conferir "Como testar a etapa 1" e "Como testar a etapa 3". Só depois começar a etapa 4.
+**Próximo passo:** instalar `dist/Claude Usage Widget Setup 0.1.0.exe` (gerado por `npm run dist` na branch `etapa-4-graficos-config`, que contém as etapas 1 a 3), usar por alguns dias e conferir "Como testar" das etapas 1, 3 e 4. Só depois começar a etapa 5.
 
-Cada branch parte da anterior (`etapa-1-atualizacao` → `etapa-2-animacao` → `etapa-3-historico`), porque as etapas foram iniciadas a pedido do usuário antes do teste de um dia da etapa 1. Nada foi mesclado na `main`.
+Cada branch parte da anterior (`etapa-1-atualizacao` → `etapa-2-animacao` → `etapa-3-historico` → `etapa-4-graficos-config`), porque as etapas foram iniciadas a pedido do usuário antes do teste de um dia da etapa 1. Nada foi mesclado na `main`.
 
 ### Para continuar em outro PC
 
 ```bash
 git clone https://github.com/JhonPaulMR/claude-usage-widget.git
 cd claude-usage-widget
-git checkout etapa-3-historico
+git checkout etapa-4-graficos-config
 npm install
 npm test
 npm run dist
@@ -151,7 +151,7 @@ A medição conta o intervalo entre quadros na thread principal; não enxerga en
 4. Conferir que `%APPDATA%\claude-usage-widget\history.jsonl` ganha uma linha por consulta.
 5. Depois de 7 dias, ver se a previsão pessimista passou a refletir os horários de uso forte.
 
-## Etapa 4: gráficos e configurações
+## Etapa 4: gráficos e configurações (feita)
 
 - Dois gráficos no painel aberto, estilo sparkline: **sessão** (janela de 5 h atual) e **semanal** (7 dias).
 - Seletor: separados (padrão), combinados (mesmo eixo de 0 a 100%), só sessão, só semanal.
@@ -160,6 +160,41 @@ A medição conta o intervalo entre quadros na thread principal; não enxerga en
 - Janela visível no modo combinado: 1 h, 5 h, 24 h ou 7 dias (padrão 5 h).
 - Janela de configurações própria. O menu da bandeja fica só com atualizar, mostrar/ocultar, abrir configurações e sair.
 - Configurações: itens visíveis no modo compacto (sessão, semanal, previsão, reset, gráfico), contagem do reset sempre visível, limiares de alerta, e os interruptores de token da etapa 1.
+
+### O que mudou
+
+- `src/main/prefs.js` (novo): lista das preferências editáveis e validação. A janela de configurações só grava chave e valor que passam por `sanitize()`.
+- `src/main/chart.js` (novo): séries dos gráficos a partir do histórico, no máximo 120 pontos por gráfico.
+- `src/shared/sparkline.js` (novo): geometria das linhas, quebra do traço em reset ou buraco de amostras, e a linha de projeção.
+- `src/main/settingsWindow.js`, `settingsPreload.js`, `src/renderer/settings.html|js|css` (novos): janela de configurações. Cada controle grava na hora; não há botão de salvar. O IPC `settings:*` só é aceito quando vem dessa janela.
+- Painel: um gráfico em cada cartão (sessão em laranja, semanal em azul), eixo de 0 a 100%, do início da janela até o reset. A linha pontilhada é a previsão pessimista até o limite, ou até o reset quando não acaba. No modo combinado, um cartão próprio com as duas linhas e a janela escolhida, com 20% do eixo à frente de "agora" para a projeção.
+- Aba recolhida: contagem do reset, previsão (só a hora pessimista) e gráfico pequeno, cada um ligado nas configurações. A altura da aba agora acompanha o conteúdo.
+- Menu da bandeja e do botão direito: Atualizar agora, Mostrar/Ocultar, Configurações e Sair.
+- Intervalos: 30 s, 1, 2 e 5 min. Quem estava em 3 min passa para 2 min.
+- Limiares de alerta editáveis (1 a 99%), em `alertLow` e `alertHigh`; `alert80` e `alert90` continuam sendo os interruptores.
+- A janela do widget passou para 520 px de altura.
+- `electron . --settings` abre as configurações ao iniciar (atalho de desenvolvimento).
+
+### Decisões tomadas na implementação (não estavam no plano)
+
+- **Seletor do gráfico:** fica na janela de configurações, não no painel.
+- **"Contagem do reset sempre visível":** foi entendida como o item "Contagem do reset" do modo compacto (o reset aparece mesmo com o painel fechado). Não há um interruptor separado.
+- **Sessão e semanal desmarcados juntos:** a aba mostra a sessão, para nunca ficar vazia.
+- **Tema, monitor, iniciar com o Windows e demonstração** saíram do menu e foram para a seção "Aparência e sistema". O monitor continua sendo um só até a etapa 5.
+
+### Medição (`electron . --perf --demo`, 144 Hz)
+
+Painel com gráficos (443 px de altura): em 5 medições, 4 sem nenhum quadro acima de 20 ms (pior quadro de 7,2 a 9 ms) e 1, logo após apagar o perfil, com 2 quadros lentos na primeira abertura (pior de 62,6 ms).
+
+### Como testar a etapa 4
+
+1. Botão direito no widget ou na bandeja: o menu tem só quatro itens. Abrir **Configurações**.
+2. Trocar o modo do gráfico entre separados, combinados, só sessão e só semanal, e a janela do combinado: o painel muda na hora.
+3. Marcar e desmarcar os itens do modo compacto: a aba cresce e encolhe, e o hover continua pegando a aba inteira.
+4. Arrastar a aba até o fim da tela com todos os itens ligados: ela deve parar inteira dentro da tela.
+5. Mudar um limiar de alerta para um valor logo acima do uso atual e esperar passar.
+6. Depois de algumas horas de uso, ver se os gráficos e a linha pontilhada fazem sentido.
+7. Passar o mouse na aba logo após iniciar: a abertura deve continuar fluida com os gráficos.
 
 ## Etapa 5: multi-monitor
 

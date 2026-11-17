@@ -6,6 +6,8 @@ const DEFAULTS = {
   intervalSec: 60,
   alert80: true,
   alert90: true,
+  alertLow: 80, // valor do primeiro limiar (ligado por alert80)
+  alertHigh: 90, // valor do segundo limiar (ligado por alert90)
   alertForecast: true, // avisa quando a previsão de acabar for menor que 15 min
   autostart: false,
   autostartInit: false, // true depois de aplicar o padrão da primeira execução instalada
@@ -14,6 +16,13 @@ const DEFAULTS = {
   top: null, // posição vertical (px, relativa à tela); null = centralizado
   displayId: null,
   demo: false,
+  chartMode: 'separate', // separate | combined | session | weekly
+  chartRange: '5h', // janela visível no modo combinado: 1h | 5h | 24h | 7d
+  compactSession: true, // itens visíveis na aba recolhida
+  compactWeekly: true,
+  compactForecast: false,
+  compactReset: false,
+  compactChart: false,
   autoRenew: true, // token vencido: pede ao Claude Code para renovar
   autoRenewPaid: true, // permite a requisição mínima (Haiku) se o comando gratuito não renovar
   paidFallback: false, // plano B via /v1/messages quando o formato do endpoint mudar

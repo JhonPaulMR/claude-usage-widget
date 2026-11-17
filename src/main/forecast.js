@@ -102,6 +102,7 @@ function habitualRate(points, now) {
 // Monta o resultado comum a sessão e semanal.
 //   status: 'none' sem dados | 'limit' já em 100% | 'low' sem ritmo medido | 'safe' não acaba antes
 //           do reset | 'range' acaba antes do reset
+//   rate: ritmo pessimista (% por ms), usado na linha de projeção do gráfico
 //   earliest: hora pessimista; latest: hora otimista (null se o ritmo lento não chega ao limite)
 //   activeEndsAt: hora prevista só pelo uso de agora (para o alerta); null se a pessoa não está usando
 function build(pct, resetsAt, now, rates) {
@@ -115,8 +116,8 @@ function build(pct, resetsAt, now, rates) {
   const latest = now + left / slow;
   const activeRate = rates.active ? Math.max(rates.recent || 0, rates.avg || 0) : 0;
   const activeEndsAt = activeRate > 0 && now + left / activeRate < resetsAt ? now + left / activeRate : null;
-  if (earliest >= resetsAt) return { status: 'safe' };
-  return { status: 'range', earliest, latest: latest < resetsAt ? latest : null, activeEndsAt, habitual: rates.habitual > 0 && fast === rates.habitual };
+  if (earliest >= resetsAt) return { status: 'safe', rate: fast };
+  return { status: 'range', rate: fast, earliest, latest: latest < resetsAt ? latest : null, activeEndsAt, habitual: rates.habitual > 0 && fast === rates.habitual };
 }
 
 function windowAverage(pct, resetsAt, windowMs, now) {

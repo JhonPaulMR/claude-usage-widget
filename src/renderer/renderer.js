@@ -1,14 +1,17 @@
-/* global fmt, widget */
+/* global fmt, spark, widget */
 const R = 22;
 const CIRC = 2 * Math.PI * R;
 
 const $ = (id) => document.getElementById(id);
+const MINI_W = 56, MINI_H = 16; // gráfico da aba recolhida
+const CHART_W = 200, CHART_H = 36; // gráfico dos cartões
 const els = {
   widget: $('widget'), tab: $('tab'), inner: $('panelInner'), status: $('status'), updated: $('updated'), refresh: $('refreshBtn'),
   models: $('models'),
 };
 
 let usage = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null, forecast: null, intervalSec: 60 };
+let prefs = { theme: 'dark', chartMode: 'separate', chartRange: '5h', compact: { session: true, weekly: true, forecast: false, reset: false, chart: false } };
 let open = false;
 let pinned = false;
 let leaveTimer = null;
@@ -25,7 +28,11 @@ for (const name of ['session', 'weekly']) {
     `<circle class="ring-track" cx="26" cy="26" r="${R}"/>` +
     `<circle class="ring-fill c-unknown" cx="26" cy="26" r="${R}" stroke-dasharray="${CIRC}" stroke-dashoffset="${CIRC}"/>` +
     `<g transform="translate(15.5 15.5) scale(.875)"><path class="ring-logo" d="${window.CLAUDE_LOGO_PATH}"/></g>` +
-    `</svg></div><span class="gauge-pct">—</span>`;
+    `</svg></div><span class="gauge-pct">—</span>` +
+    `<span class="gauge-reset" data-cd="" hidden>—</span>` +
+    `<span class="gauge-fc" hidden></span>` +
+    `<svg class="gauge-spark s-${name}" viewBox="0 0 ${MINI_W} ${MINI_H}" preserveAspectRatio="none" hidden>` +
+    `<path class="spark-area"/><path class="spark-line"/></svg>`;
 }
 
 function setRing(name, item, stale) {
@@ -38,6 +45,68 @@ function setRing(name, item, stale) {
   fill.setAttribute('class', `ring-fill c-${band}`);
   ring.className = `ring${!stale && band !== 'unknown' ? ` glow-${band}` : ''}${!stale && pct != null && pct > 90 ? ' pulse' : ''}`;
   wrap.querySelector('.gauge-pct').textContent = pct == null ? '—' : `${Math.round(pct)}%`;
+}
+
+// Itens opcionais da aba recolhida (configurações): contagem do reset, previsão e gráfico.
+function setGaugeExtras(name, item, now) {
+  const wrap = $(`gauge-${name}`);
+  const c = prefs.compact;
+  wrap.hidden = !(name === 'session' ? c.session || !c.weekly : c.weekly);
+
+  const reset = wrap.querySelector('.gauge-reset');
+  reset.hidden = !c.reset;
+  reset.dataset.cd = (item && item.resetsAt) || '';
+  reset.textContent = item && item.resetsAt ? fmt.formatCountdown(item.resetsAt - now) : '—';
+
+  const fc = fmt.forecastShort(item && usage.forecast && usage.forecast[name], name, now);
+  const fcEl = wrap.querySelector('.gauge-fc');
+  fcEl.hidden = !c.forecast || !fc.text;
+  fcEl.textContent = fc.text;
+  fcEl.className = `gauge-fc ${fc.level}`;
+
+  const svg = wrap.querySelector('.gauge-spark');
+  const chart = usage.charts && usage.charts[name];
+  svg.toggleAttribute('hidden', !c.chart);
+  if (c.chart && chart) {
+    const segs = spark.segments(chart.points, chart.from, chart.to, MINI_W, MINI_H);
+    svg.querySelector('.spark-line').setAttribute('d', spark.linePath(segs));
+    svg.querySelector('.spark-area').setAttribute('d', spark.areaPath(segs, MINI_H));
+  }
+}
+
+// ---------- gráficos do painel ----------
+// series: [{ name, points }]; a projeção pontilhada sai do último dado de cada série.
+function chartSvg(series, from, to) {
+  const d = usage.data || {};
+  const parts = series.map(({ name, points }) => {
+    const segs = spark.segments(points, from, to, CHART_W, CHART_H);
+    const proj = spark.projection(d[name], usage.forecast && usage.forecast[name], usage.fetchedAt, to);
+    const xy = proj && proj.map(([t, p]) => `${(((t - from) / (to - from)) * CHART_W).toFixed(1)} ${spark.toY(p, CHART_H).toFixed(1)}`);
+    return `<g class="s-${name}">` +
+      (series.length === 1 ? `<path class="spark-area" d="${spark.areaPath(segs, CHART_H)}"/>` : '') +
+      `<path class="spark-line" d="${spark.linePath(segs)}"/>` +
+      (xy ? `<path class="spark-proj" d="M${xy[0]}L${xy[1]}"/>` : '') + '</g>';
+  });
+  return `<svg class="spark" viewBox="0 0 ${CHART_W} ${CHART_H}" preserveAspectRatio="none">${parts.join('')}</svg>`;
+}
+
+function cardChart(name) {
+  const mode = prefs.chartMode;
+  const chart = usage.charts && usage.charts[name];
+  if (!chart || !(mode === 'separate' || mode === name)) return '';
+  return chartSvg([{ name, points: chart.points }], chart.from, chart.to);
+}
+
+const RANGE_LABELS = { '1h': 'última hora', '5h': 'últimas 5 h', '24h': 'últimas 24 h', '7d': 'últimos 7 dias' };
+function renderCombined() {
+  const el = $('card-chart');
+  const c = prefs.chartMode === 'combined' && usage.charts && usage.charts.combined;
+  el.hidden = !c;
+  if (!c) { el.innerHTML = ''; return; }
+  el.innerHTML =
+    `<div class="legend"><span class="key s-session">sessão</span><span class="key s-weekly">semanal</span>` +
+    `<span class="range">${RANGE_LABELS[prefs.chartRange] || ''}</span></div>` +
+    chartSvg([{ name: 'weekly', points: c.weekly }, { name: 'session', points: c.session }], c.from, c.to);
 }
 
 // ---------- painel ----------
@@ -54,6 +123,7 @@ function cardHtml(name, item, now) {
     <div class="row"><span class="title">${TITLES[name]}</span>
       <span class="pct t-${band}">${pct == null ? '—' : Math.round(pct) + '<small>%</small>'}</span></div>
     <div class="bar"><i class="b-${band}" data-w="${pct == null ? 0 : pct}"></i></div>
+    ${cardChart(name)}
     <div class="sub">reseta em <b data-cd="${item && item.resetsAt || ''}">${countdown}</b> · ${at}</div>
     <div class="sub pace ${fc.level}${old ? ' old' : ''}">${fc.pre}${fc.strong ? `<b>${fc.strong}</b>` : ''}${fc.post}${old ? ' · desatualizada' : ''}</div>`;
 }
@@ -66,9 +136,12 @@ function render() {
 
   setRing('session', d && d.session, stale);
   setRing('weekly', d && d.weekly, stale);
+  setGaugeExtras('session', d && d.session, now);
+  setGaugeExtras('weekly', d && d.weekly, now);
 
   $('card-session').innerHTML = cardHtml('session', d && d.session, now);
   $('card-weekly').innerHTML = cardHtml('weekly', d && d.weekly, now);
+  renderCombined();
   // A política de segurança da página bloqueia style="" no HTML; a largura entra por JavaScript.
   document.querySelectorAll('.bar > i').forEach((el) => { el.style.width = `${el.dataset.w}%`; });
   els.models.innerHTML = ((d && d.models) || [])
@@ -142,7 +215,8 @@ function setOpen(v) {
 // ---------- expandir / recolher ----------
 // Janela fixa e transparente; fora do widget ela ignora o mouse (click-through) mas continua
 // recebendo mousemove para detectar o hover.
-const TAB_W = 72, TAB_H = 220;
+const TAB_W = 72;
+let tabH = 220; // altura da aba recolhida; muda com os itens do modo compacto
 let ignoring = true;
 let fullW = 0, fullH = 0; // medidas guardadas: o mousemove não lê layout
 function setIgnore(v) {
@@ -153,7 +227,10 @@ function setIgnore(v) {
 function syncHeight() {
   fullW = els.widget.offsetWidth;
   fullH = els.widget.offsetHeight;
-  els.widget.style.setProperty('--cb', `${Math.max(0, fullH - TAB_H)}px`);
+  const h = els.tab.offsetHeight;
+  if (h !== tabH) window.widget.tabHeight(h);
+  tabH = h;
+  els.widget.style.setProperty('--cb', `${Math.max(0, fullH - tabH)}px`);
 }
 function expand() {
   clearTimeout(leaveTimer);
@@ -165,7 +242,7 @@ function collapse() {
 }
 function hit(x, y) {
   if (open) return x >= window.innerWidth - fullW && y <= fullH;
-  return x >= window.innerWidth - TAB_W && y <= TAB_H;
+  return x >= window.innerWidth - TAB_W && y <= tabH;
 }
 function onPointer(x, y) {
   const inside = hit(x, y);
@@ -224,7 +301,11 @@ els.refresh.addEventListener('click', () => {
 
 // ---------- IPC ----------
 window.widget.onUsage((p) => { usage = p; renderSoon(); });
-window.widget.onPrefs((p) => { document.body.dataset.theme = p.theme || 'dark'; });
+window.widget.onPrefs((p) => {
+  prefs = { ...prefs, ...p, compact: { ...prefs.compact, ...(p.compact || {}) } };
+  document.body.dataset.theme = prefs.theme || 'dark';
+  renderSoon();
+});
 render();
 syncHeight();
 requestAnimationFrame(() => requestAnimationFrame(() => els.widget.classList.remove('init')));

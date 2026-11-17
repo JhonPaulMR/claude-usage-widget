@@ -58,6 +58,17 @@ function forecastText(fc, kind, now = Date.now()) {
   return { level: 'warn', pre: 'acaba entre ', strong: at(fc.earliest), post: ` e ${at(fc.latest)}` };
 }
 
+// Versão curta para a aba recolhida: só a hora pessimista. Devolve { level, text }.
+function forecastShort(fc, kind, now = Date.now()) {
+  if (!fc || fc.status === 'none') return { level: 'none', text: '' };
+  if (fc.status === 'limit') return { level: 'warn', text: 'limite' };
+  if (fc.status !== 'range') return { level: 'ok', text: 'ok' };
+  const d = new Date(fc.earliest);
+  const sameDay = new Date(now).toDateString() === d.toDateString();
+  if (kind !== 'weekly' || sameDay) return { level: 'warn', text: formatClock(fc.earliest) };
+  return { level: 'warn', text: `${WEEKDAYS[d.getDay()]} ${String(d.getHours()).padStart(2, '0')}h` };
+}
+
 // A previsão está velha quando o último dado tem mais de 2 intervalos de idade.
 function forecastIsStale(fetchedAt, intervalSec, now = Date.now()) {
   if (!fetchedAt || !intervalSec) return false;
@@ -84,6 +95,7 @@ const api = {
   formatCountdown,
   formatResetAt,
   forecastText,
+  forecastShort,
   forecastIsStale,
   formatMmSs,
   formatClock,

@@ -5,11 +5,12 @@ const path = require('path');
 // Janela de tamanho fixo (transparente). Expandir/recolher é só CSS; fora do widget ela é
 // "click-through" (setIgnoreMouseEvents), então não bloqueia os apps embaixo.
 const WIN_W = 308;
-const WIN_H = 440; // cabe o painel com a previsão em duas linhas e os modelos
-const WIN_CLAMP_H = 240; // o widget visível é menor que a janela; permite encostar embaixo
+const WIN_H = 520; // cabe o painel com os gráficos, a previsão em duas linhas e os modelos
+const TAB_MARGIN = 20;
 
 function createWidgetWindow(store) {
   let dragStartTop = 0;
+  let clampH = 220 + TAB_MARGIN; // a aba recolhida é menor que a janela; permite encostar embaixo
 
   const win = new BrowserWindow({
     width: WIN_W,
@@ -52,7 +53,7 @@ function createWidgetWindow(store) {
     const top = saved == null ? area.y + (area.height - WIN_H) / 2 : saved;
     win.setBounds({
       x: area.x + area.width - WIN_W,
-      y: clampTop(top, area, WIN_CLAMP_H),
+      y: clampTop(top, area, clampH),
       width: WIN_W,
       height: WIN_H,
     });
@@ -73,8 +74,14 @@ function createWidgetWindow(store) {
     },
     dragMove(deltaY) {
       const area = targetDisplay().workArea;
-      const top = clampTop(dragStartTop + deltaY, area, WIN_CLAMP_H);
+      const top = clampTop(dragStartTop + deltaY, area, clampH);
       store.set('top', top);
+      place();
+    },
+    // A altura da aba muda com os itens do modo compacto; a aba inteira precisa caber na tela.
+    setTabHeight(h) {
+      if (!Number.isFinite(h) || h < 60 || h > WIN_H) return;
+      clampH = Math.round(h) + TAB_MARGIN;
       place();
     },
     resetPosition() {

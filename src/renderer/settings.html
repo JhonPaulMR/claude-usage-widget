@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:" />
+  <title>Configurações · Claude Usage Widget</title>
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body data-theme="dark">
+  <main>
+    <section>
+      <h2>Atualização</h2>
+      <label class="field">
+        <span>Intervalo de atualização<small>Cada ponto do gráfico é uma consulta.</small></span>
+        <select data-key="intervalSec" data-type="number">
+          <option value="30">30 segundos</option>
+          <option value="60">1 minuto</option>
+          <option value="120">2 minutos</option>
+          <option value="300">5 minutos</option>
+        </select>
+      </label>
+      <div class="field">
+        <span>Consultar o uso agora</span>
+        <button type="button" data-action="refresh">Atualizar agora</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Gráficos</h2>
+      <label class="field">
+        <span>Gráficos no painel</span>
+        <select data-key="chartMode">
+          <option value="separate">Separados</option>
+          <option value="combined">Combinados</option>
+          <option value="session">Só sessão</option>
+          <option value="weekly">Só semanal</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Janela do modo combinado</span>
+        <select data-key="chartRange" data-enabled-when="chartMode=combined">
+          <option value="1h">1 hora</option>
+          <option value="5h">5 horas</option>
+          <option value="24h">24 horas</option>
+          <option value="7d">7 dias</option>
+        </select>
+      </label>
+    </section>
+
+    <section>
+      <h2>Modo compacto</h2>
+      <p class="hint">O que aparece na aba recolhida, na borda da tela.</p>
+      <label class="check"><input type="checkbox" data-key="compactSession" /><span>Sessão (5 horas)</span></label>
+      <label class="check"><input type="checkbox" data-key="compactWeekly" /><span>Semanal (7 dias)</span></label>
+      <label class="check"><input type="checkbox" data-key="compactReset" /><span>Contagem do reset</span></label>
+      <label class="check"><input type="checkbox" data-key="compactForecast" /><span>Previsão</span></label>
+      <label class="check"><input type="checkbox" data-key="compactChart" /><span>Gráfico</span></label>
+    </section>
+
+    <section>
+      <h2>Alertas</h2>
+      <div class="check">
+        <input type="checkbox" data-key="alert80" id="alert80" />
+        <label for="alert80">Avisar ao passar de</label>
+        <input type="number" min="1" max="99" data-key="alertLow" data-type="number" data-enabled-when="alert80" aria-label="Primeiro limiar, em porcentagem" /><span>%</span>
+      </div>
+      <div class="check">
+        <input type="checkbox" data-key="alert90" id="alert90" />
+        <label for="alert90">Avisar ao passar de</label>
+        <input type="number" min="1" max="99" data-key="alertHigh" data-type="number" data-enabled-when="alert90" aria-label="Segundo limiar, em porcentagem" /><span>%</span>
+      </div>
+      <label class="check"><input type="checkbox" data-key="alertForecast" /><span>Avisar quando a previsão for menor que 15 minutos</span></label>
+    </section>
+
+    <section>
+      <h2>Token e consumo</h2>
+      <label class="check"><input type="checkbox" data-key="autoRenew" /><span>Renovar o token automaticamente</span></label>
+      <label class="check"><input type="checkbox" data-key="autoRenewPaid" data-enabled-when="autoRenew" /><span>Permitir renovação com requisição mínima<small>Gasta um pouco de uso.</small></span></label>
+      <label class="check"><input type="checkbox" data-key="paidFallback" /><span>Plano B se o formato do endpoint mudar<small>Gasta um pouco de uso.</small></span></label>
+      <p class="hint" id="renewal"></p>
+    </section>
+
+    <section>
+      <h2>Aparência e sistema</h2>
+      <label class="field">
+        <span>Tema</span>
+        <select data-key="theme">
+          <option value="dark">Escuro</option>
+          <option value="light">Claro</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Monitor</span>
+        <select data-key="displayId" data-type="display" id="displays"></select>
+      </label>
+      <div class="field">
+        <span>Posição do widget</span>
+        <button type="button" data-action="center">Centralizar verticalmente</button>
+      </div>
+      <label class="check"><input type="checkbox" data-key="autostart" id="autostart" /><span>Iniciar com o Windows<small id="autostartHint" hidden>Só vale na versão instalada.</small></span></label>
+      <label class="check"><input type="checkbox" data-key="demo" id="demo" /><span>Dados de demonstração</span></label>
+    </section>
+
+    <footer id="about"></footer>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>
