@@ -17,7 +17,7 @@ Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já 
 
 Cada branch parte da anterior (`etapa-1-atualizacao` → `etapa-2-animacao` → `etapa-3-historico` → `etapa-4-graficos-config` → `etapa-5-multi-monitor` → `etapa-6-mascote`), porque as etapas foram feitas em sequência a pedido do usuário, antes dos testes de uso. Nada foi mesclado na `main`. A versão passou para 0.2.0 e o README foi atualizado na etapa 6.
 
-**Pendência de decisão:** o repositório no GitHub é público, e o plano diz que o desenho do mascote é para uso pessoal, sem distribuição. Enviar a branch `etapa-6-mascote` publica o desenho. Ela fica só local até o usuário decidir (tornar o repositório privado, enviar assim mesmo, ou trocar o desenho).
+**Decisão sobre o mascote (16/11/2026):** o repositório no GitHub é público e o plano dizia que o desenho do mascote não era para distribuição. O usuário decidiu enviar a branch `etapa-6-mascote` mesmo assim.
 
 ### Para continuar em outro PC
 
