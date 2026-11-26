@@ -20,7 +20,9 @@ test('backoff: Retry-After vale mais que a regra, dentro de [intervalo, 5 min]',
 
 test('espera por estado', () => {
   assert.equal(nextDelaySec('ok', 60, 0), 60);
-  assert.equal(nextDelaySec('ok', 60, 300), 60); // backoff antigo não atrasa o estado normal
+  assert.equal(nextDelaySec('ok', 60, 90), 90); // depois de um 429, volta ao intervalo aos poucos
+  assert.equal(nextDelaySec('error', 60, 0), 60);
+  assert.equal(nextDelaySec('error', 30, 0), 30);
   assert.equal(nextDelaySec('ratelimit', 60, 90), 90);
   assert.equal(nextDelaySec('offline', 60, 0), 15);
   assert.equal(nextDelaySec('server', 60, 0), 30);

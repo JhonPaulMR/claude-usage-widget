@@ -1,6 +1,6 @@
 # Plano de melhorias do Claude Usage Widget
 
-Atualizado em 16/11/2026. Este arquivo registra as decisões tomadas, o que já foi feito e o que falta, para retomar o trabalho em qualquer sessão.
+Atualizado em 26/11/2026. Este arquivo registra as decisões tomadas, o que já foi feito e o que falta, para retomar o trabalho em qualquer sessão.
 
 ## Onde paramos
 
@@ -33,6 +33,43 @@ npm run dist
 O instalador (`dist/`) e os ícones (`build/`) não vão para o repositório; `npm run dist` gera os dois. O histórico (`history.jsonl`) fica na pasta de dados de cada PC e não acompanha o repositório: em outro PC a previsão começa do zero.
 
 Regra de entrega: uma etapa por branch, um commit por etapa, lógica pura com testes em `node --test`, instalador ao fim de cada etapa, e só se avança depois do teste do usuário. O README é atualizado no final.
+
+## Correção 0.2.1: widget parado em "sem conexão" (26/11/2026)
+
+Branch `fix-atualizacao-0.2.1`, a partir da `etapa-6-mascote`.
+
+### O que se viu
+
+- O `history.jsonl` mostrava o mesmo padrão em vários dias: as leituras paravam à tarde e só voltavam por volta das 13:20–13:30 do dia seguinte, quando o widget era reiniciado. Reiniciar resolvia na hora.
+- Em 26/11 a instância iniciada às 13:30 subiu com o token vencido; o token foi renovado às 13:31 e mesmo assim ela ficou 15 minutos em "sem conexão", com uma conexão TCP aberta para `api.anthropic.com`. Uma instância nova, com o mesmo código e as mesmas credenciais, leu na hora.
+- 35 a 40% das consultas tomavam 429 (o endpoint de uso tem limite, dividido com o próprio Claude Code). Daí os intervalos de 75 s e 144 s no lugar do configurado.
+
+### Causas no código
+
+1. A consulta usava o `fetch` do Node (undici) no processo principal. Ele não usa a pilha de rede do Chromium: não segue o proxy nem os certificados do Windows e não descarta conexões mortas quando a rede muda ou o PC volta da suspensão.
+2. O prazo de 15 s valia só até os cabeçalhos. Se o corpo não chegasse, a consulta ficava pendurada, e `fetching = true` bloqueava todas as próximas, inclusive o botão de atualizar.
+3. Qualquer exceção sem `kind` (até um defeito no histórico, na previsão ou no alerta) aparecia como "sem conexão", sem registrar o motivo.
+4. Depois de um 429 seguido de sucesso, o ritmo voltava direto ao intervalo cheio e tomava outro 429.
+5. O botão de atualizar girava por 1,2 s fixos, sem relação com a resposta, e num 429 seguido aumentava a espera.
+
+### O que mudou
+
+- `usageProvider.js`: `net.fetch` do Electron (pilha do Chromium), com o fetch global como reserva fora do Electron. O prazo cobre a resposta inteira. A falha de rede guarda o motivo (`detail`: `timeout`, `ECONNRESET`, `net::ERR_...`) e o HTTP.
+- `schedule.js`: `decayBackoffSec` (o ritmo volta ao intervalo ÷1,5 por consulta boa), estado `error`, `isStuck` (consulta pendente há mais de 45 s) e `isOverdue` (timer atrasado mais de 30 s).
+- `main.js`: cada consulta tem um número e uma consulta presa é superada pela próxima. Um watchdog a cada 15 s refaz a consulta se ela estiver presa ou atrasada. Falha depois que os dados chegaram não derruba a leitura. Exceção sem `kind` vira estado `erro`. Ao voltar da suspensão o backoff é zerado. Regravar as credenciais dispara uma consulta em qualquer estado de falha (antes só em `auth`). Uma atualização manual num 429 não aumenta a espera.
+- `diagLog.js` (novo): `userData/widget.log` com início, mudanças de estado, motivo das falhas, renovações e suspensão (256 KB, uma geração antiga). Nunca grava token. As configurações mostram a última falha e têm o botão "Abrir registro".
+- Interface: o botão gira até a resposta chegar, o status mostra "atualizando" e "erro", o tooltip do status mostra o motivo, e "Atualizado" diz "ontem" ou a data quando o dado é antigo.
+- A opção de 30 s avisa que provoca mais limites de consulta.
+
+### Como testar a 0.2.1
+
+1. Usar normalmente por alguns dias, inclusive suspendendo e ligando o PC: o widget não deve mais exigir reinício.
+2. Se aparecer "sem conexão" ou "erro" por mais de alguns minutos, abrir **Configurações → Abrir registro** e guardar o `widget.log`: ele mostra o motivo.
+3. Clicar em atualizar: o botão gira até a resposta chegar.
+
+### Observação de rede
+
+Neste PC o `git` não acessa o github.com: a rede intercepta o TLS e o schannel não consegue checar a revogação. Funciona apontando o git para as raízes confiáveis do Windows, sem desligar a verificação: exportar `Cert:\LocalMachine\Root` para um `.pem` e usar `git -c http.sslBackend=openssl -c http.sslCAInfo=<arquivo.pem> fetch`.
 
 ## Etapa 1: atualização (feita)
 

@@ -51,6 +51,7 @@ function apply(next) {
   document.getElementById('autostart').disabled = !state.packaged;
   document.getElementById('autostartHint').hidden = state.packaged;
   document.getElementById('renewal').textContent = state.renewal;
+  document.getElementById('diagnosis').textContent = state.diagnosis || '';
   document.getElementById('callKeyHint').textContent = state.callKeyFailed
     ? 'Outro programa já usa esse atalho. Escolha outro.'
     : 'Ele vai andando até onde o mouse aponta (só no modo passeio).';

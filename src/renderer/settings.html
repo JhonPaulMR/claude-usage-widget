@@ -13,7 +13,7 @@
       <label class="field">
         <span>Intervalo de atualização<small>Cada ponto do gráfico é uma consulta.</small></span>
         <select data-key="intervalSec" data-type="number">
-          <option value="30">30 segundos</option>
+          <option value="30">30 segundos (mais limites de consulta)</option>
           <option value="60">1 minuto</option>
           <option value="120">2 minutos</option>
           <option value="300">5 minutos</option>
@@ -22,6 +22,11 @@
       <div class="field">
         <span>Consultar o uso agora</span>
         <button type="button" data-action="refresh">Atualizar agora</button>
+      </div>
+      <p class="hint" id="diagnosis"></p>
+      <div class="field">
+        <span>Registro de diagnóstico</span>
+        <button type="button" data-action="open-log">Abrir registro</button>
       </div>
     </section>
 

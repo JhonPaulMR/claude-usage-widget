@@ -134,10 +134,21 @@ function cardHtml(name, item, now) {
     <div class="sub pace ${fc.level}${old ? ' old' : ''}">${fc.pre}${fc.strong ? `<b>${fc.strong}</b>` : ''}${fc.post}${old ? ' · desatualizada' : ''}</div>`;
 }
 
+// "às 16:56" hoje; "ontem às 16:56" ou "25/11 às 16:56" quando o dado é antigo (não parece atual).
+function updatedWhen(t, now) {
+  if (!t) return '—';
+  const day = (x) => new Date(x).toDateString();
+  const clock = fmt.formatClock(t);
+  if (day(t) === day(now)) return `às ${clock}`;
+  if (day(t) === day(now - 86400000)) return `ontem às ${clock}`;
+  const d = new Date(t);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} às ${clock}`;
+}
+
 function render() {
   const now = Date.now();
   const d = usage.data;
-  const stale = usage.state === 'offline' || usage.state === 'server' || usage.state === 'auth' || usage.state === 'format' || (usage.state === 'loading' && !d);
+  const stale = usage.state === 'offline' || usage.state === 'server' || usage.state === 'auth' || usage.state === 'format' || usage.state === 'error' || (usage.state === 'loading' && !d);
   els.widget.classList.toggle('stale', stale);
 
   setRing('session', d && d.session, stale);
@@ -157,9 +168,10 @@ function render() {
   const soft = usage.state === 'offline' || usage.state === 'loading' || usage.state === 'ratelimit' || usage.state === 'server';
   els.updated.textContent = usage.state === 'auth'
     ? (usage.renewing ? 'Pedindo ao Claude Code para renovar o token' : usage.message || '')
-    : `Atualizado às ${fmt.formatClock(usage.fetchedAt)}`;
+    : `Atualizado ${updatedWhen(usage.fetchedAt, now)}`;
   els.status.className = `head-status ${usage.state === 'ok' ? '' : soft ? 'off' : 'err'}`;
-  els.status.title = usage.message;
+  els.status.title = [usage.message, usage.detail].filter(Boolean).join(' · ');
+  els.refresh.classList.toggle('spin', !!usage.fetching);
   renderStatus(now);
   syncHeight();
 }
@@ -176,8 +188,9 @@ function renderStatus(now) {
     ratelimit: `limitado${wait}`,
     auth: usage.renewing ? 'renovando token' : 'sessão expirada',
     format: 'formato inesperado',
+    error: `erro${wait}`,
   };
-  const text = msgs[usage.state] || '';
+  const text = usage.fetching && usage.state !== 'ok' ? 'atualizando' : msgs[usage.state] || '';
   if (els.status.textContent !== text) els.status.textContent = text;
 }
 
@@ -312,9 +325,10 @@ window.addEventListener('contextmenu', (e) => {
 });
 
 els.refresh.addEventListener('click', () => {
+  // Gira até a resposta chegar (o principal manda fetching=false); o tempo mínimo só evita um piscar.
   els.refresh.classList.add('spin');
   window.widget.refresh();
-  setTimeout(() => els.refresh.classList.remove('spin'), 1200);
+  setTimeout(() => { if (!usage.fetching) els.refresh.classList.remove('spin'); }, 600);
 });
 
 // ---------- IPC ----------

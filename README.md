@@ -8,7 +8,7 @@ Widget para Windows que mostra, em tempo real, quanto você já usou dos limites
 
 ## Instalar
 1. Gere o instalador com `npm install` e `npm run dist`.
-2. Execute **`dist/Claude Usage Widget Setup 0.2.0.exe`**. A instalação é automática e o widget abre sozinho.
+2. Execute **`dist/Claude Usage Widget Setup 0.2.1.exe`**. A instalação é automática e o widget abre sozinho.
 3. Na primeira execução ele já fica configurado para **iniciar com o Windows**.
 
 > O Windows pode mostrar o aviso "SmartScreen" porque o instalador não é assinado. Clique em *Mais informações* → *Executar assim mesmo*.

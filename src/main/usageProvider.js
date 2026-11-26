@@ -9,6 +9,7 @@ const CRED_PATH = path.join(os.homedir(), '.claude', '.credentials.json');
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const TIMEOUT_MS = 15000;
+const USER_AGENT = `claude-usage-widget/${require('../../package.json').version}`;
 
 class UsageError extends Error {
   // kind: 'auth' | 'network' | 'server' | 'format' | 'ratelimit'
@@ -92,13 +93,43 @@ function normalizeHeaders(headers) {
   return { session, weekly, models: [] };
 }
 
-async function request(url, init) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+// Dentro do Electron usa a pilha de rede do Chromium (net.fetch): proxy e certificados do Windows,
+// e descarta conexões mortas quando a rede muda ou o PC volta da suspensão. O fetch do Node (undici)
+// não faz nada disso e deixava o widget preso em "sem conexão" até reiniciar. Fora do Electron
+// (testes, scripts) cai no fetch global.
+function defaultFetch() {
   try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
+    const { net } = require('electron');
+    if (net && typeof net.fetch === 'function') return net.fetch.bind(net);
+  } catch {
+    /* fora do Electron */
+  }
+  return fetch;
+}
+
+// Código curto do motivo de uma falha de rede, para o diagnóstico (ECONNRESET, net::ERR_..., etc.).
+function networkDetail(e) {
+  const c = e && e.cause;
+  const code = (c && (c.code || c.message)) || (e && e.message) || '';
+  return String(code).slice(0, 120);
+}
+
+// Faz a requisição e lê o corpo inteiro dentro do mesmo prazo: antes o prazo valia só até os
+// cabeçalhos, e um corpo que nunca chegava deixava a consulta pendurada para sempre.
+async function request(url, init, { fetchImpl = defaultFetch(), timeoutMs = TIMEOUT_MS } = {}) {
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs);
+  try {
+    const res = await fetchImpl(url, { ...init, signal: ctrl.signal });
+    const body = await res.text();
+    return { status: res.status, ok: res.ok, headers: res.headers, body };
   } catch (e) {
-    throw new UsageError('network', 'Sem conexão');
+    const err = timedOut
+      ? new UsageError('network', `Sem resposta em ${Math.round(timeoutMs / 1000)} s`)
+      : new UsageError('network', 'Sem conexão');
+    err.detail = timedOut ? 'timeout' : networkDetail(e);
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -120,18 +151,22 @@ function classifyStatus(res) {
   return new UsageError('format', `Resposta HTTP ${res.status}`);
 }
 
-async function fetchViaUsageEndpoint(token) {
+async function fetchViaUsageEndpoint(token, opts) {
   const res = await request(USAGE_URL, {
     headers: {
       Authorization: `Bearer ${token}`,
       'anthropic-beta': 'oauth-2025-04-20',
-      'User-Agent': 'claude-usage-widget/0.1',
+      'User-Agent': USER_AGENT,
     },
-  });
-  if (!res.ok) throw classifyStatus(res);
+  }, opts);
+  if (!res.ok) {
+    const err = classifyStatus(res);
+    err.status = res.status;
+    throw err;
+  }
   let json;
   try {
-    json = await res.json();
+    json = JSON.parse(res.body);
   } catch {
     throw new UsageError('format', 'Resposta não é JSON');
   }
@@ -140,7 +175,7 @@ async function fetchViaUsageEndpoint(token) {
 
 // Gasta uma quantidade mínima de uso (1 token). Só roda se o endpoint principal mudar de formato
 // E o usuário tiver ligado o plano B (desligado por padrão).
-async function fetchViaHeaders(token) {
+async function fetchViaHeaders(token, opts) {
   const res = await request(MESSAGES_URL, {
     method: 'POST',
     headers: {
@@ -148,14 +183,14 @@ async function fetchViaHeaders(token) {
       'anthropic-beta': 'oauth-2025-04-20',
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
-      'User-Agent': 'claude-usage-widget/0.1',
+      'User-Agent': USER_AGENT,
     },
     body: JSON.stringify({
       model: 'claude-haiku-5-5',
       max_tokens: 1,
       messages: [{ role: 'user', content: 'hi' }],
     }),
-  });
+  }, opts);
   if (res.status === 401 || res.status === 403 || res.status === 429) {
     // 429 ainda pode trazer cabeçalhos úteis
     if (res.status !== 429) throw classifyStatus(res);
@@ -163,13 +198,14 @@ async function fetchViaHeaders(token) {
   return normalizeHeaders(res.headers);
 }
 
-async function fetchUsage({ allowPaidFallback = false } = {}) {
+// opts.fetchImpl / opts.timeoutMs: injetáveis para teste.
+async function fetchUsage({ allowPaidFallback = false, ...opts } = {}) {
   const token = readToken();
   try {
-    return await fetchViaUsageEndpoint(token);
+    return await fetchViaUsageEndpoint(token, opts);
   } catch (e) {
     if (e.kind !== 'format' || !allowPaidFallback) throw e;
-    return fetchViaHeaders(token);
+    return fetchViaHeaders(token, opts);
   }
 }
 
@@ -186,4 +222,4 @@ function fetchDemo(now = Date.now()) {
   };
 }
 
-module.exports = { fetchUsage, fetchDemo, normalizeOauth, normalizeHeaders, classifyStatus, readExpiry, UsageError, CRED_PATH };
+module.exports = { fetchUsage, fetchDemo, normalizeOauth, normalizeHeaders, classifyStatus, readExpiry, request, UsageError, CRED_PATH };

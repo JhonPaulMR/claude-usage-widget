@@ -18,7 +18,7 @@ function emotion(p, now = Date.now()) {
   const pct = (x) => (x && typeof x.pct === 'number' ? x.pct : null);
   if (d && (pct(d.session) >= 100 || pct(d.weekly) >= 100)) return 'morto';
   const state = p && p.state;
-  if (!d || ['offline', 'auth', 'format', 'server'].includes(state)) return 'confuso';
+  if (!d || ['offline', 'auth', 'format', 'server', 'error'].includes(state)) return 'confuso';
   if (state === 'ratelimit' && p.nextAt && p.nextAt - now > LONG_RATELIMIT_MS) return 'confuso';
   const fc = p.forecast || {};
   if ((fc.session && fc.session.status === 'range') || (fc.weekly && fc.weekly.status === 'range')) return 'preocupado';

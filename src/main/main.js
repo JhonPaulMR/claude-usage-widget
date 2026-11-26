@@ -1,10 +1,11 @@
-const { app, Tray, Menu, Notification, globalShortcut, powerMonitor, ipcMain, nativeImage, screen } = require('electron');
+const { app, Tray, Menu, Notification, globalShortcut, powerMonitor, ipcMain, nativeImage, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createStore } = require('./store');
 const { createWidgetManager } = require('./window');
 const { fetchUsage, fetchDemo, readExpiry, CRED_PATH } = require('./usageProvider');
-const { nextBackoffSec, nextDelaySec } = require('./schedule');
+const { nextBackoffSec, decayBackoffSec, nextDelaySec, isStuck, isOverdue } = require('./schedule');
+const { createDiagLog } = require('./diagLog');
 const { createTokenRefresher } = require('./tokenRefresher');
 const { createAlerter } = require('./alerts');
 const { createHistory } = require('./history');
@@ -27,11 +28,21 @@ let store, widgets, mascot, tray, settingsWin, pollTimer, backoffSec = 0;
 let history, demoHistory; // pontos reais (arquivo) e pontos da demonstração (só memória)
 let payload = { state: 'loading', data: null, fetchedAt: null, message: '', nextAt: null };
 let fetching = false;
+let fetchStartedAt = null; // quando a consulta em andamento começou (detecta consulta pendurada)
+let fetchGen = 0; // cada consulta tem um número; resultado de uma consulta superada é descartado
+let diag = { write: () => {}, file: '' }; // registro de diagnóstico (userData/widget.log)
+let lastLogged = ''; // evita repetir no registro a mesma falha a cada tentativa
 let callKey = null; // atalho registrado para chamar o mascote
 let callKeyFailed = false; // outro programa já usa o atalho
 let lastRenewal = null; // resultado da última tentativa de renovar o token (aparece nas configurações)
 
-const tokenRefresher = createTokenRefresher({ readExpiry, log: (r) => { lastRenewal = { ...r, at: Date.now() }; } });
+const tokenRefresher = createTokenRefresher({
+  readExpiry,
+  log: (r) => {
+    lastRenewal = { ...r, at: Date.now() };
+    diag.write('token', r.ok ? 'renovado' : 'renovação falhou', { tier: r.tier, reason: r.reason });
+  },
+});
 
 // No modo mascote o alerta vira fala; a notificação do Windows continua, a menos que seja desligada.
 const alerter = createAlerter((title, body) => {
@@ -162,53 +173,114 @@ function renewToken() {
   });
 }
 
-// O Claude Code regrava o arquivo de credenciais ao renovar: se estávamos sem sessão, consulta na hora.
+// O Claude Code regrava o arquivo de credenciais ao renovar: se a última consulta falhou (sessão
+// expirada, sem conexão, erro), consulta na hora em vez de esperar a próxima tentativa.
 function watchCredentials() {
   let debounce = null;
   try {
     fs.watch(path.dirname(CRED_PATH), (_ev, name) => {
-      if (name !== path.basename(CRED_PATH) || payload.state !== 'auth') return;
+      if (name !== path.basename(CRED_PATH) || payload.state === 'ok' || payload.state === 'ratelimit') return;
       clearTimeout(debounce);
-      debounce = setTimeout(refresh, 800);
+      debounce = setTimeout(() => { diag.write('token', 'credenciais regravadas, consultando'); refresh(); }, 800);
     });
   } catch {
     /* pasta ainda não existe: o agendamento normal cobre */
   }
 }
 
-async function refresh() {
-  if (fetching) return;
+// Registra no diagnóstico só quando o estado ou o motivo muda (não a cada tentativa igual).
+function logOutcome(e) {
+  const key = `${payload.state}|${payload.message}|${payload.detail || ''}`;
+  if (key === lastLogged) return;
+  const recovered = payload.state === 'ok' && lastLogged && !lastLogged.startsWith('ok|');
+  lastLogged = key;
+  if (payload.state === 'ok') {
+    if (recovered) diag.write('ok', 'voltou a atualizar');
+    return;
+  }
+  diag.write(payload.state, payload.message, {
+    detail: payload.detail,
+    status: e && e.status,
+    retryIn: payload.nextAt ? `${Math.round((payload.nextAt - Date.now()) / 1000)}s` : null,
+    stack: e && !e.kind && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : null,
+  });
+}
+
+// manual: pedido pelo botão ou pelo menu. Num 429 seguido, não aumenta a espera (o pedido foi da pessoa).
+async function refresh({ manual = false } = {}) {
+  if (fetching && !isStuck(fetchStartedAt)) return; // já tem uma consulta em andamento
+  if (fetching) diag.write('stuck', 'consulta anterior sem resposta, começando outra', { since: new Date(fetchStartedAt).toLocaleTimeString('pt-BR') });
+  const gen = ++fetchGen;
   fetching = true;
+  fetchStartedAt = Date.now();
   clearTimeout(pollTimer);
+  payload = { ...payload, fetching: true };
+  push();
+  let error = null;
   try {
     const data = isDemo() ? fetchDemo() : await fetchUsage({ allowPaidFallback: store.get('paidFallback') });
-    backoffSec = 0;
+    if (gen !== fetchGen) return;
+    backoffSec = decayBackoffSec(backoffSec, store.get('intervalSec'));
     const fetchedAt = Date.now();
-    activeHistory().add(fetchedAt, data);
-    payload = withForecast({ state: 'ok', data, fetchedAt, message: '' });
+    // Os dados chegaram: falha daqui em diante (histórico, previsão, alerta) não pode virar "sem conexão".
+    try { activeHistory().add(fetchedAt, data); } catch (e) { diag.write('error', 'histórico', { stack: e.stack }); }
+    try {
+      payload = withForecast({ state: 'ok', data, fetchedAt, message: '' });
+    } catch (e) {
+      diag.write('error', 'previsão/gráfico', { stack: e.stack });
+      payload = { state: 'ok', data, fetchedAt, message: '', intervalSec: store.get('intervalSec') };
+    }
     if (!isDemo()) store.set('last', { data, fetchedAt });
-    alerter(data, prefs.alertThresholds(store.get), { forecast: store.get('alertForecast') ? payload.forecast : null, now: fetchedAt });
+    try {
+      alerter(data, prefs.alertThresholds(store.get), { forecast: store.get('alertForecast') ? payload.forecast : null, now: fetchedAt });
+    } catch (e) { diag.write('error', 'alerta', { stack: e.stack }); }
   } catch (e) {
-    const kind = e.kind || 'network';
-    if (kind === 'ratelimit') backoffSec = nextBackoffSec(backoffSec, store.get('intervalSec'), e.retryAfterSec);
+    if (gen !== fetchGen) return;
+    error = e;
+    // Sem "kind" é defeito do próprio widget, não da rede: aparece como "erro", com o motivo no registro.
+    const kind = e.kind || 'error';
+    if (kind === 'ratelimit') {
+      const interval = store.get('intervalSec');
+      backoffSec = manual && backoffSec
+        ? Math.max(backoffSec, nextBackoffSec(0, interval, e.retryAfterSec))
+        : nextBackoffSec(backoffSec, interval, e.retryAfterSec);
+    }
     const last = store.get('last');
-    payload = withForecast({
+    const base = {
       state: kind === 'network' ? 'offline' : kind,
       data: last ? last.data : null,
       fetchedAt: last ? last.fetchedAt : null,
-      message: e.message || '',
+      message: e.message || String(e),
+      detail: e.detail || (e.status ? `HTTP ${e.status}` : ''),
       renewing: false,
-    });
+    };
+    try { payload = withForecast(base); } catch { payload = { ...base, intervalSec: store.get('intervalSec') }; }
     if (e.expired && store.get('autoRenew')) {
       payload.renewing = true;
       renewToken();
     }
   } finally {
-    fetching = false;
-    schedule();
-    push();
-    rebuildMenu();
+    if (gen === fetchGen) {
+      fetching = false;
+      fetchStartedAt = null;
+      payload.fetching = false;
+      schedule();
+      push();
+      rebuildMenu();
+      logOutcome(error);
+    }
   }
+}
+
+// Rede de segurança: se o timer se perdeu (suspensão, relógio ajustado) ou a consulta ficou
+// pendurada, consulta de novo. Antes disso o widget podia ficar parado até ser reiniciado.
+function startWatchdog() {
+  setInterval(() => {
+    if (fetching ? isStuck(fetchStartedAt) : isOverdue(payload.nextAt)) {
+      diag.write('watchdog', fetching ? 'consulta pendurada' : 'consulta atrasada', { nextAt: payload.nextAt ? new Date(payload.nextAt).toLocaleTimeString('pt-BR') : null });
+      refresh();
+    }
+  }, 15000);
 }
 
 // Menu da bandeja e do botão direito: só o essencial. O resto está na janela de configurações.
@@ -218,7 +290,7 @@ function buildMenu() {
 
 function buildMenuTemplate() {
   return [
-    { label: 'Atualizar agora', click: refresh },
+    { label: 'Atualizar agora', click: () => refresh({ manual: true }) },
     {
       label: store.get('visible') ? 'Ocultar widget' : 'Mostrar widget',
       accelerator: SHORTCUT,
@@ -260,11 +332,19 @@ function rebuildMenu() {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('settings:state', settingsState());
 }
 
+// Última falha conhecida, para a janela de configurações (o detalhe completo fica no registro).
+function diagnosisLabel() {
+  if (payload.state === 'ok') return 'Atualizando normalmente';
+  const when = payload.nextAt ? ` · próxima tentativa às ${new Date(payload.nextAt).toLocaleTimeString('pt-BR')}` : '';
+  return `${payload.message || payload.state}${payload.detail ? ` (${payload.detail})` : ''}${when}`;
+}
+
 function settingsState() {
   return {
     prefs: prefs.pick(store.get),
     displays: widgets.list(),
     renewal: renewalLabel(),
+    diagnosis: diagnosisLabel(),
     forcedDemo: FORCE_DEMO,
     packaged: app.isPackaged,
     version: app.getVersion(),
@@ -333,6 +413,8 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   store = createStore(app.getPath('userData'));
+  diag = createDiagLog(app.getPath('userData'));
+  diag.write('start', `versão ${app.getVersion()}`, { interval: `${store.get('intervalSec')}s` });
   for (const [k, v] of Object.entries(prefs.migrate(store.all()))) store.set(k, v);
   history = createHistory(app.getPath('userData'), { seed: store.get('history') || [] });
   demoHistory = createHistory(app.getPath('userData'), { persist: false });
@@ -369,10 +451,11 @@ app.whenReady().then(() => {
   ipcMain.on('settings:action', (e, name) => {
     if (!fromSettings(e)) return;
     if (name === 'center') widgets.resetPositions();
-    if (name === 'refresh') refresh();
+    if (name === 'refresh') refresh({ manual: true });
+    if (name === 'open-log') shell.openPath(diag.file);
   });
   ipcMain.on('settings:display', (e, id, enabled) => { if (fromSettings(e)) widgets.setEnabled(id, !!enabled); });
-  ipcMain.on('refresh', refresh);
+  ipcMain.on('refresh', () => refresh({ manual: true }));
   ipcMain.on('set-ignore', (e, ignore) => {
     if (mascot && mascot.isBalloon(e.sender)) mascot.setBalloonIgnore(ignore);
     else widgets.setIgnoreMouse(e.sender, ignore);
@@ -404,8 +487,10 @@ app.whenReady().then(() => {
   rebuildMenu();
 
   globalShortcut.register(SHORTCUT, toggleVisible);
-  powerMonitor.on('resume', () => setTimeout(refresh, 3000));
-  powerMonitor.on('unlock-screen', () => setTimeout(refresh, 2000));
+  // Ao voltar da suspensão ou desbloquear, consulta logo e esquece o backoff antigo.
+  powerMonitor.on('suspend', () => diag.write('power', 'suspensão'));
+  powerMonitor.on('resume', () => { diag.write('power', 'voltou da suspensão'); backoffSec = 0; setTimeout(refresh, 3000); });
+  powerMonitor.on('unlock-screen', () => { if (payload.state !== 'ok') backoffSec = 0; setTimeout(refresh, 2000); });
 
   // Primeira execução da versão instalada: já inicia com o Windows (dá para desligar no menu).
   if (app.isPackaged && !store.get('autostartInit')) {
@@ -415,6 +500,7 @@ app.whenReady().then(() => {
   applyAutostart();
   if (process.argv.includes('--settings')) openSettings(); // atalho de desenvolvimento
   watchCredentials();
+  startWatchdog();
   refresh();
 });
 
